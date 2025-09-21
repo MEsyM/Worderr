@@ -24,8 +24,7 @@ export const metadata: Metadata = {
     default: "LingvoJam",
     template: "%s | LingvoJam",
   },
-  description:
-    "Improv-inspired wordplay with live collaboration, powered by Next.js and Tailwind.",
+  description: "Improv-inspired wordplay with live collaboration, powered by Next.js and Tailwind.",
 };
 
 export default function RootLayout({
