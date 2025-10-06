@@ -191,7 +191,7 @@ export async function getRoomSnapshot(roomId: string): Promise<RoomSnapshot | nu
         },
       },
       turns: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { startedAt: "asc" },
         include: { votes: true },
       },
       summaries: {
@@ -222,7 +222,7 @@ export async function listRoomSnapshots(): Promise<RoomSnapshot[]> {
         },
       },
       turns: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { startedAt: "asc" },
         include: { votes: true },
       },
       summaries: {
@@ -267,7 +267,7 @@ export async function listRoomsForUser(userId: string): Promise<RoomSnapshot[]> 
         },
       },
       turns: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { startedAt: "asc" },
         include: { votes: true },
       },
       summaries: {

@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       data: {
         title,
         description: description ?? null,
-        hostId: session.user.id,
+        host: { connect: { id: session.user.id } },
         code,
         prompts,
         maxWords: Math.max(10, Math.min(parsedMaxWords, 200)),
