@@ -5,10 +5,11 @@ import Link from "next/link";
 
 import "./globals.css";
 
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { AppProviders } from "@/components/providers/app-providers";
 import { Button } from "@/components/ui/button";
-import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Toaster } from "@/components/ui/use-toast";
+import { auth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const geistSans = Geist({
@@ -33,11 +34,13 @@ export const metadata: Metadata = {
   description: "Improv-inspired wordplay with live collaboration, powered by Next.js and Tailwind.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await auth();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -47,7 +50,7 @@ export default function RootLayout({
           geistMono.variable,
         )}
       >
-        <ThemeProvider>
+        <AppProviders>
           <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-10">
             <header className="sticky top-0 z-30 -mx-4 mb-6 border-b bg-background/80 backdrop-blur">
               <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
@@ -67,18 +70,34 @@ export default function RootLayout({
                   >
                     Highlights
                   </Link>
-                  <Link
-                    href="/profile"
-                    className="text-muted-foreground transition hover:text-foreground"
-                  >
-                    Profile
-                  </Link>
+                  {session?.user ? (
+                    <Link
+                      href="/profile"
+                      className="text-muted-foreground transition hover:text-foreground"
+                    >
+                      Profile
+                    </Link>
+                  ) : null}
                 </nav>
                 <div className="flex items-center gap-2">
                   <ThemeToggle />
-                  <Button asChild size="sm" className="hidden sm:inline-flex">
-                    <Link href="/new">Launch room</Link>
-                  </Button>
+                  {session?.user ? (
+                    <>
+                      <Button asChild size="sm" className="hidden sm:inline-flex">
+                        <Link href="/new">Launch room</Link>
+                      </Button>
+                      <SignOutButton />
+                    </>
+                  ) : (
+                    <>
+                      <Button asChild size="sm" variant="ghost">
+                        <Link href="/login">Log in</Link>
+                      </Button>
+                      <Button asChild size="sm" className="hidden sm:inline-flex">
+                        <Link href="/register">Register</Link>
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </header>
@@ -87,8 +106,7 @@ export default function RootLayout({
               © {currentYear} LingvoJam. Crafted for collaborative wordplay.
             </footer>
           </div>
-          <Toaster />
-        </ThemeProvider>
+        </AppProviders>
       </body>
     </html>
   );

@@ -2,6 +2,14 @@
 
 LingvoJam is a collaborative wordplay platform built with Next.js 15, Prisma, and NextAuth. It combines synchronous writing tools with real-time collaboration primitives to help storytellers create lyrical narratives together.
 
+## Core functionality
+
+- **Account management** – Visitors can create an account with their name, email address, and password through the `/register` page. The API stores a bcrypt-hashed password and prevents duplicate registrations. Existing users sign in via the `/login` page using credentials-based authentication backed by NextAuth sessions. Magic-link email auth remains available for teams that prefer passwordless entry.
+- **Session-aware navigation** – The global layout surfaces contextual actions (register, log in, sign out) and keeps the active session available to both client and server components through shared providers. Authenticated users see their profile avatar and can end their session with a single click.
+- **Room creation workflow** – Authenticated hosts can publish new jam rooms from the dashboard form. The UI guides them through selecting a mode (solo or crew), configuring rule presets (max words, sentences, forbidden vocabulary, rhyme target), and supplies inline toasts for success or failure states. Anonymous visitors are prompted to register or log in before the form becomes interactive.
+- **Real-time collaboration scaffold** – Socket.IO namespaces back each room, broadcasting lifecycle events such as participants joining, timer state changes, and lyrical turn submissions. Server-side guards ensure socket metadata includes the signed-in user identity so crews can attribute contributions in live sessions.
+- **Prisma-backed persistence** – The PostgreSQL schema tracks users, rooms, invitations, and lyrical turns. Migrations, seeds, and runtime access all go through Prisma, ensuring a consistent data contract between the API routes and collaboration services.
+
 ## Table of contents
 
 - [Architecture overview](#architecture-overview)
@@ -21,7 +29,7 @@ LingvoJam is a collaborative wordplay platform built with Next.js 15, Prisma, an
 ## Architecture overview
 
 - **Web application**: Next.js App Router project (`src/app`) rendered with React 19 and Tailwind CSS.
-- **Authentication**: NextAuth with the Prisma adapter, configured for email magic-link flows.
+- **Authentication**: NextAuth with the Prisma adapter, supporting both credential-based logins and email magic-link flows.
 - **Database**: PostgreSQL schema managed by Prisma migrations and seed data.
 - **Real-time transport**: Socket.IO configuration shared between the server and client.
 - **UI toolkit**: shadcn-inspired components that rely on Tailwind utility tokens.
