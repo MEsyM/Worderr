@@ -5,10 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { toRoomTurn } from "@/lib/server/rooms";
 
 interface RouteParams {
-  params: { id: string; turnId: string };
+  params: Promise<{ id: string; turnId: string }>;
 }
 
-export async function PATCH(request: Request, { params }: RouteParams) {
+export async function PATCH(request: Request, context: RouteParams) {
+  const params = await context.params;
   try {
     const session = await auth();
     if (!session?.user?.id) {

@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { emitToRoom } from "@/lib/realtime/server";
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function POST(request: Request, { params }: RouteParams) {
+export async function POST(request: Request, context: RouteParams) {
+  const params = await context.params;
   try {
     const body = await request.json();
     const { userId, role } = body ?? {};

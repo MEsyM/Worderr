@@ -5,10 +5,11 @@ import { emitToRoom } from "@/lib/realtime/server";
 import { DEFAULT_TURN_VALIDATION, validateTurn } from "@/lib/turn-validation";
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function POST(request: Request, { params }: RouteParams) {
+export async function POST(request: Request, context: RouteParams) {
+  const params = await context.params;
   try {
     const body = await request.json();
     const { action, round, prompt, content, authorId, turnId, validationOptions } = body ?? {};
