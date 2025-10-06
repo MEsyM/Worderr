@@ -12,6 +12,15 @@ describe("validateTurn", () => {
     expect(result.errors).toEqual([]);
   });
 
+  it("preserves line breaks while sanitizing", () => {
+    const result = validateTurn(" First line\nSecond   line \n ");
+
+    expect(result.isValid).toBe(true);
+    expect(result.sanitized).toBe("First line\nSecond line");
+    expect(result.wordTotal).toBe(4);
+    expect(result.sentenceTotal).toBe(1);
+  });
+
   it("flags turns exceeding the maximum word count", () => {
     const result = validateTurn("one two three four", { maxWords: 3, maxSentences: 5 });
 

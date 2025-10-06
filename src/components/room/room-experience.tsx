@@ -9,6 +9,7 @@ import { TurnFeed } from "@/components/room/turn-feed";
 import { ScorePills } from "@/components/room/score-pills";
 import { RecapView } from "@/components/room/recap-view";
 import { useRoom } from "@/components/room/room-provider";
+import { TurnStory } from "@/components/room/turn-story";
 
 interface RoomExperienceProps {
   viewerId?: string;
@@ -41,11 +42,12 @@ export function RoomExperience({ viewerId }: RoomExperienceProps) {
       <RoomTimer />
       <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-6">
+          <TurnStory />
           <TurnComposer />
-          <TurnFeed viewerId={resolvedViewerId} />
         </div>
         <div className="space-y-6">
           <ScorePills />
+          <TurnFeed viewerId={resolvedViewerId} />
           <RecapView />
         </div>
       </div>
