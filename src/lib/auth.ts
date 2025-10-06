@@ -19,7 +19,7 @@ const emailServerPort = process.env.EMAIL_SERVER_PORT ? Number(process.env.EMAIL
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: {
-    strategy: "database",
+    strategy: "jwt",
   },
   trustHost: true,
   providers: [
@@ -68,20 +68,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async session({ session, user }) {
-      if (session.user) {
-        const sourceUser =
-          user ??
-          (session.user.email
-            ? await prisma.user.findUnique({ where: { email: session.user.email } })
-            : null);
-        if (sourceUser) {
-          session.user.id = sourceUser.id;
-          session.user.role = sourceUser.role;
-          session.user.name = sourceUser.name;
-          session.user.email = sourceUser.email;
+    async jwt({ token, user }) {
+      if (user) {
+        token.userId = user.id;
+        token.role = user.role;
+        token.name = user.name ?? token.name;
+        token.email = user.email ?? token.email;
+      } else if ((!token.userId || !token.role) && token.email) {
+        const existingUser = await prisma.user.findUnique({ where: { email: token.email } });
+        if (existingUser) {
+          token.userId = existingUser.id;
+          token.role = existingUser.role;
+          token.name = existingUser.name ?? token.name;
+          token.email = existingUser.email ?? token.email;
         }
       }
+
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        if (typeof token.userId === "string") {
+          session.user.id = token.userId;
+        } else if (typeof token.sub === "string") {
+          session.user.id = token.sub;
+        }
+
+        if (token.role) {
+          session.user.role = token.role;
+        } else if (!session.user.role) {
+          session.user.role = "PLAYER";
+        }
+
+        const nameFromToken = token.name as string | null | undefined;
+        const emailFromToken = token.email as string | null | undefined;
+
+        session.user.name = nameFromToken ?? session.user.name ?? null;
+        session.user.email = emailFromToken ?? session.user.email ?? null;
+      }
+
       return session;
     },
   },
