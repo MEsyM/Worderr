@@ -96,12 +96,13 @@ export function toRoomTurn(turn: TurnWithVotes): RoomTurn {
 
 function deriveRules(room: RoomWithRelations): RoomRule[] {
   const rules: RoomRule[] = [
-    { type: "maxWords", value: room.maxWords },
-    { type: "maxSentences", value: room.maxSentences },
+    { type: "maxWords", value: room.maxWords ?? 40 },
+    { type: "maxSentences", value: room.maxSentences ?? 2 },
   ];
 
-  if (room.forbiddenWords.length > 0) {
-    rules.push({ type: "forbidden", value: room.forbiddenWords });
+  const forbiddenWords = room.forbiddenWords ?? [];
+  if (forbiddenWords.length > 0) {
+    rules.push({ type: "forbidden", value: forbiddenWords });
   }
 
   if (room.rhymeTarget) {
@@ -142,15 +143,16 @@ function mapSummaryToHighlight(summary: SummaryWithTurn): RoomHighlight {
 }
 
 function derivePrompts(room: RoomWithRelations, turns: RoomTurn[]): string[] {
-  if (room.prompts.length > 0) {
-    return [...room.prompts];
+  const prompts = room.prompts ?? [];
+  if (prompts.length > 0) {
+    return [...prompts];
   }
 
-  const prompts = Array.from(new Set(turns.map((turn) => turn.prompt).filter(Boolean)));
-  if (prompts.length === 0) {
-    prompts.push("Start the story with your first prompt.");
+  const derivedPrompts = Array.from(new Set(turns.map((turn) => turn.prompt).filter(Boolean)));
+  if (derivedPrompts.length === 0) {
+    derivedPrompts.push("Start the story with your first prompt.");
   }
-  return prompts;
+  return derivedPrompts;
 }
 
 function mapRoom(room: RoomWithRelations): RoomSnapshot {
