@@ -21,7 +21,7 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/worderr?schema=public}
-    command: sh -c "npx prisma migrate deploy && npm run dev"
+    command: sh -c "npx prisma migrate deploy && npx prisma generate && npm run dev"
     volumes:
       - .:/app
       - /app/node_modules

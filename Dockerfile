@@ -6,16 +6,20 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json ./
+COPY prisma ./prisma
 RUN npm ci && npm install bcryptjs@^3.0.2 --no-save
+RUN npx prisma generate
 
 FROM deps AS dev
 ENV NODE_ENV=development
 COPY . .
+RUN npx prisma generate
 CMD ["npm", "run", "dev"]
 
 FROM deps AS builder
 ENV NODE_ENV=production
 COPY . .
+RUN npx prisma generate
 RUN npm run build
 
 FROM base AS runner
