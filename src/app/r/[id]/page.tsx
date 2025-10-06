@@ -3,14 +3,15 @@ import { notFound } from "next/navigation";
 
 import { RoomProvider } from "@/components/room/room-provider";
 import { RoomExperience } from "@/components/room/room-experience";
-import { getRoomSnapshot } from "@/lib/rooms";
+import { auth } from "@/lib/auth";
+import { getRoomSnapshot } from "@/lib/server/rooms";
 
 interface RoomPageProps {
   params: { id: string };
 }
 
-export function generateMetadata({ params }: RoomPageProps): Metadata {
-  const snapshot = getRoomSnapshot(params.id);
+export async function generateMetadata({ params }: RoomPageProps): Promise<Metadata> {
+  const snapshot = await getRoomSnapshot(params.id);
   if (!snapshot) {
     return {
       title: "Room not found",
@@ -23,16 +24,19 @@ export function generateMetadata({ params }: RoomPageProps): Metadata {
   };
 }
 
-export default function RoomPage({ params }: RoomPageProps) {
-  const snapshot = getRoomSnapshot(params.id);
+export default async function RoomPage({ params }: RoomPageProps) {
+  const snapshot = await getRoomSnapshot(params.id);
 
   if (!snapshot) {
     notFound();
   }
 
+  const session = await auth();
+  const viewerId = session?.user?.id ?? snapshot.participants[0]?.id;
+
   return (
-    <RoomProvider roomId={snapshot.id}>
-      <RoomExperience />
+    <RoomProvider room={snapshot}>
+      <RoomExperience viewerId={viewerId ?? undefined} />
     </RoomProvider>
   );
 }

@@ -75,13 +75,21 @@ export function TurnComposer() {
 
     try {
       setIsSubmitting(true);
-      submitTurn({ content: result.sanitized, authorId: currentPlayer.id });
-      toast({
-        title: "Turn submitted",
-        description: "Your riff is live in the feed.",
-      });
-      setDraft("");
-      dismissSuggestion();
+      const turn = await submitTurn({ content: result.sanitized, authorId: currentPlayer.id });
+      if (turn) {
+        toast({
+          title: "Turn submitted",
+          description: "Your riff is live in the feed.",
+        });
+        setDraft("");
+        dismissSuggestion();
+      } else {
+        toast({
+          title: "Unable to submit turn",
+          description: "Please try again in a moment.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }

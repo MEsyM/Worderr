@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { ArrowBigDown, ArrowBigUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -14,10 +15,23 @@ interface VoteBarProps {
 
 export function VoteBar({ turn, viewerId }: VoteBarProps) {
   const { castVote } = useRoom();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const positiveVotes = turn.votes.filter((vote) => vote.value > 0).length;
   const totalVotes = turn.votes.length;
   const percentage = totalVotes > 0 ? Math.round((positiveVotes / totalVotes) * 100) : 0;
   const viewerVote = turn.votes.find((vote) => vote.voterId === viewerId)?.value ?? 0;
+
+  const handleVote = async (value: number) => {
+    if (isSubmitting) {
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await castVote(turn.id, viewerId, value);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -37,7 +51,8 @@ export function VoteBar({ turn, viewerId }: VoteBarProps) {
           type="button"
           variant={viewerVote > 0 ? "secondary" : "outline"}
           size="sm"
-          onClick={() => castVote(turn.id, viewerId, viewerVote > 0 ? 0 : 1)}
+          disabled={isSubmitting}
+          onClick={() => handleVote(viewerVote > 0 ? 0 : 1)}
         >
           <ArrowBigUp className="mr-2 h-4 w-4" /> Cheer
         </Button>
@@ -45,7 +60,8 @@ export function VoteBar({ turn, viewerId }: VoteBarProps) {
           type="button"
           variant={viewerVote < 0 ? "destructive" : "outline"}
           size="sm"
-          onClick={() => castVote(turn.id, viewerId, viewerVote < 0 ? 0 : -1)}
+          disabled={isSubmitting}
+          onClick={() => handleVote(viewerVote < 0 ? 0 : -1)}
         >
           <ArrowBigDown className="mr-2 h-4 w-4" /> Skip
         </Button>

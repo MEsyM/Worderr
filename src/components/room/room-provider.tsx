@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { nanoid } from "nanoid";
 
 import {
-  getRoomSnapshot,
+  buildRecapFromSnapshot,
+  calculateParticipantScores,
   getSoloSuggestion,
   roomRuleLabel,
   type RoomParticipant,
@@ -37,48 +37,22 @@ type RoomAction =
   | { type: "TICK" }
   | { type: "STOP_TIMER" }
   | { type: "ADVANCE_PLAYER"; suggestion?: string }
-  | { type: "SUBMIT_TURN"; turn: RoomTurn }
-  | { type: "CAST_VOTE"; turnId: string; voterId: string; value: number }
+  | { type: "UPSERT_TURN"; turn: RoomTurn }
   | { type: "RESET_SUGGESTION" };
 
-function buildRecapFromState(
-  snapshot: RoomSnapshot,
-  participants: RoomParticipant[],
-  turns: RoomTurn[],
-): RoomRecap {
-  let winningTurn: RoomTurn | undefined;
-  let winningScore = -Infinity;
-  let totalVotes = 0;
-
-  turns.forEach((turn) => {
-    const turnScore = turn.votes.reduce((acc, vote) => acc + vote.value, 0);
-    totalVotes += turn.votes.length;
-    if (turnScore > winningScore) {
-      winningScore = turnScore;
-      winningTurn = turn;
-    }
-  });
-
-  return {
-    room: snapshot,
-    totalVotes,
-    winningTurn,
-    scoreByParticipant: participants.map((participant) => ({
-      participant,
-      score: participant.score,
-    })),
-  };
-}
-
 function createInitialState(snapshot: RoomSnapshot): RoomState {
-  const publishedTurns = snapshot.turns.filter((turn) => turn.status === "published");
-  const currentPlayerIndex = publishedTurns.length % snapshot.participants.length;
-  const currentPromptIndex = publishedTurns.length % snapshot.prompts.length;
+  const sortedTurns = [...snapshot.turns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const participants = calculateParticipantScores(snapshot.participants, sortedTurns);
+  const publishedTurns = sortedTurns.filter((turn) => turn.status === "published");
+  const currentPlayerIndex =
+    participants.length > 0 ? publishedTurns.length % participants.length : 0;
+  const currentPromptIndex =
+    snapshot.prompts.length > 0 ? publishedTurns.length % snapshot.prompts.length : 0;
 
   return {
     snapshot,
-    participants: snapshot.participants.map((participant) => ({ ...participant })),
-    turns: [...snapshot.turns].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    participants,
+    turns: sortedTurns,
     currentPlayerIndex,
     currentPromptIndex,
     timer: {
@@ -88,18 +62,6 @@ function createInitialState(snapshot: RoomSnapshot): RoomState {
     },
     pendingAdvance: false,
   };
-}
-
-function updateParticipantScore(
-  participants: RoomParticipant[],
-  participantId: string,
-  delta: number,
-) {
-  return participants.map((participant) =>
-    participant.id === participantId
-      ? { ...participant, score: Math.max(0, participant.score + delta) }
-      : participant,
-  );
 }
 
 function reducer(state: RoomState, action: RoomAction): RoomState {
@@ -156,10 +118,14 @@ function reducer(state: RoomState, action: RoomAction): RoomState {
       };
     }
     case "ADVANCE_PLAYER": {
+      if (state.participants.length === 0) {
+        return state;
+      }
       const nextPlayerIndex = (state.currentPlayerIndex + 1) % state.participants.length;
       const completedCycle = nextPlayerIndex === 0;
+      const promptCount = Math.max(state.snapshot.prompts.length, 1);
       const nextPromptIndex = completedCycle
-        ? (state.currentPromptIndex + 1) % state.snapshot.prompts.length
+        ? (state.currentPromptIndex + 1) % promptCount
         : state.currentPromptIndex;
 
       return {
@@ -170,50 +136,17 @@ function reducer(state: RoomState, action: RoomAction): RoomState {
         suggestion: action.suggestion,
       };
     }
-    case "SUBMIT_TURN": {
-      const existing = state.turns.filter((turn) => turn.id !== action.turn.id);
-      const updatedTurns = [...existing, action.turn];
-      const sortedTurns = updatedTurns.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-
-      return {
-        ...state,
-        turns: sortedTurns,
-        participants: updateParticipantScore(state.participants, action.turn.authorId, 2),
-        suggestion: undefined,
-      };
-    }
-    case "CAST_VOTE": {
-      let voteDelta = 0;
-      const turns = state.turns.map((turn) => {
-        if (turn.id !== action.turnId) {
-          return turn;
-        }
-
-        const previousVote = turn.votes.find((vote) => vote.voterId === action.voterId)?.value ?? 0;
-        voteDelta = action.value - previousVote;
-
-        const filteredVotes = turn.votes.filter((vote) => vote.voterId !== action.voterId);
-        const updatedVotes =
-          action.value === 0
-            ? filteredVotes
-            : [...filteredVotes, { voterId: action.voterId, value: action.value }];
-
-        return {
-          ...turn,
-          votes: updatedVotes,
-        };
-      });
-
-      const targetTurn = turns.find((turn) => turn.id === action.turnId);
-      const participants =
-        targetTurn && voteDelta !== 0
-          ? updateParticipantScore(state.participants, targetTurn.authorId, voteDelta)
-          : state.participants;
+    case "UPSERT_TURN": {
+      const turns = [...state.turns.filter((turn) => turn.id !== action.turn.id), action.turn].sort(
+        (a, b) => a.createdAt.localeCompare(b.createdAt),
+      );
+      const participants = calculateParticipantScores(state.snapshot.participants, turns);
 
       return {
         ...state,
         turns,
         participants,
+        suggestion: undefined,
       };
     }
     case "RESET_SUGGESTION": {
@@ -237,8 +170,8 @@ interface RoomContextValue {
   timer: TimerState;
   suggestion?: string;
   recap: RoomRecap;
-  submitTurn: (input: { content: string; authorId: string }) => RoomTurn | null;
-  castVote: (turnId: string, voterId: string, value: number) => void;
+  submitTurn: (input: { content: string; authorId: string }) => Promise<RoomTurn | null>;
+  castVote: (turnId: string, voterId: string, value: number) => Promise<void>;
   startTimer: (duration?: number) => void;
   stopTimer: () => void;
   advancePlayer: () => void;
@@ -248,14 +181,13 @@ interface RoomContextValue {
 
 const RoomContext = React.createContext<RoomContextValue | null>(null);
 
-export function RoomProvider({ roomId, children }: { roomId: string; children: React.ReactNode }) {
-  const snapshot = React.useMemo(() => getRoomSnapshot(roomId), [roomId]);
+interface RoomProviderProps {
+  room: RoomSnapshot;
+  children: React.ReactNode;
+}
 
-  if (!snapshot) {
-    throw new Error(`Room ${roomId} not found`);
-  }
-
-  const [state, dispatch] = React.useReducer(reducer, snapshot, createInitialState);
+export function RoomProvider({ room, children }: RoomProviderProps) {
+  const [state, dispatch] = React.useReducer(reducer, room, createInitialState);
 
   React.useEffect(() => {
     dispatch({ type: "START_TIMER", duration: 30 });
@@ -286,10 +218,14 @@ export function RoomProvider({ roomId, children }: { roomId: string; children: R
   }, [state.pendingAdvance, state.participants.length]);
 
   const value = React.useMemo<RoomContextValue>(() => {
-    const currentPlayer = state.participants[state.currentPlayerIndex];
+    const currentPlayer = state.participants[state.currentPlayerIndex] ?? state.participants[0];
     const currentPrompt =
-      state.snapshot.prompts[state.currentPromptIndex] ?? state.snapshot.prompts[0];
-    const recap = buildRecapFromState(state.snapshot, state.participants, state.turns);
+      state.snapshot.prompts[state.currentPromptIndex] ?? state.snapshot.prompts[0] ?? "";
+    const recap = buildRecapFromSnapshot({
+      ...state.snapshot,
+      participants: state.participants,
+      turns: state.turns,
+    });
 
     return {
       room: state.snapshot,
@@ -301,29 +237,48 @@ export function RoomProvider({ roomId, children }: { roomId: string; children: R
       timer: state.timer,
       suggestion: state.suggestion,
       recap,
-      submitTurn: ({ content, authorId }) => {
-        const now = new Date().toISOString();
-        const turn: RoomTurn = {
-          id: nanoid(),
-          authorId,
-          content,
-          round: state.turns.length + 1,
-          prompt: currentPrompt,
-          status: "published",
-          createdAt: now,
-          publishedAt: now,
-          votes: [],
-        };
+      submitTurn: async ({ content, authorId: _authorId }) => {
+        void _authorId;
+        try {
+          const response = await fetch(`/api/rooms/${state.snapshot.id}/turns`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content, prompt: currentPrompt }),
+          });
 
-        dispatch({ type: "SUBMIT_TURN", turn });
-        dispatch({ type: "STOP_TIMER" });
-        const suggestion = state.participants.length <= 1 ? getSoloSuggestion() : undefined;
-        dispatch({ type: "ADVANCE_PLAYER", suggestion });
-        dispatch({ type: "START_TIMER", duration: 30 });
-        return turn;
+          if (!response.ok) {
+            throw new Error("Failed to submit turn");
+          }
+
+          const data = (await response.json()) as { turn: RoomTurn };
+          dispatch({ type: "UPSERT_TURN", turn: data.turn });
+          dispatch({ type: "STOP_TIMER" });
+          const suggestion = state.participants.length <= 1 ? getSoloSuggestion() : undefined;
+          dispatch({ type: "ADVANCE_PLAYER", suggestion });
+          dispatch({ type: "START_TIMER", duration: 30 });
+          return data.turn;
+        } catch (error) {
+          console.error("submitTurn failed", error);
+          return null;
+        }
       },
-      castVote: (turnId, voterId, value) => {
-        dispatch({ type: "CAST_VOTE", turnId, voterId, value });
+      castVote: async (turnId, _voterId, value) => {
+        try {
+          const response = await fetch(`/api/rooms/${state.snapshot.id}/turns/${turnId}/vote`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ value }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to cast vote");
+          }
+
+          const data = (await response.json()) as { turn: RoomTurn };
+          dispatch({ type: "UPSERT_TURN", turn: data.turn });
+        } catch (error) {
+          console.error("castVote failed", error);
+        }
       },
       startTimer: (duration?: number) => dispatch({ type: "START_TIMER", duration }),
       stopTimer: () => dispatch({ type: "STOP_TIMER" }),

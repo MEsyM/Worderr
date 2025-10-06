@@ -43,6 +43,9 @@ export default function Home() {
               <Link href="/new">Launch a new game</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
+              <Link href="/rooms">Rooms</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
               <Link href="/highlights">See community highlights</Link>
             </Button>
           </div>
