@@ -5,7 +5,7 @@ import { roomRuleLabel } from "@/lib/rooms";
 import { buildRoomRecap } from "@/lib/server/rooms";
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 async function buildTextRecap(id: string) {
@@ -78,7 +78,8 @@ async function buildHtmlRecap(id: string) {
     </html>`;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, context: RouteParams) {
+  const params = await context.params;
   const format = request.nextUrl.searchParams.get("format") ?? "pdf";
   const textRecap = await buildTextRecap(params.id);
 
