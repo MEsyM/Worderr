@@ -50,7 +50,7 @@ export default async function RootLayout({
           geistMono.variable,
         )}
       >
-        <AppProviders>
+        <AppProviders session={session}>
           <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-10">
             <header className="sticky top-0 z-30 -mx-4 mb-6 border-b bg-background/80 backdrop-blur">
               <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
@@ -81,6 +81,9 @@ export default async function RootLayout({
                 </nav>
                 <div className="flex items-center gap-2">
                   <ThemeToggle />
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/users">Users</Link>
+                  </Button>
                   {session?.user ? (
                     <>
                       <Button asChild size="sm" className="hidden sm:inline-flex">
