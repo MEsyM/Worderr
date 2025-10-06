@@ -6,7 +6,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci && npm install bcryptjs@^3.0.2 --no-save
 
 FROM deps AS dev
 ENV NODE_ENV=development
