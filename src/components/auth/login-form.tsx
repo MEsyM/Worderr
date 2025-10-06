@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, LockClosed, Mail } from "lucide-react";
+import { Loader2, Lock, Mail } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -86,7 +86,7 @@ export function LoginForm() {
       <form onSubmit={handleSubmit} className="space-y-0">
         <CardHeader className="space-y-1">
           <CardTitle className="flex items-center gap-2 text-2xl font-semibold">
-            <LockClosed className="h-6 w-6 text-primary" /> Log in
+            <Lock className="h-6 w-6 text-primary" /> Log in
           </CardTitle>
           <CardDescription>Access your rooms and keep the storytelling flowing.</CardDescription>
         </CardHeader>
@@ -119,7 +119,7 @@ export function LoginForm() {
               Password
             </label>
             <div className="flex items-center gap-2 rounded-md border px-3 py-2">
-              <LockClosed className="h-4 w-4 text-muted-foreground" />
+              <Lock className="h-4 w-4 text-muted-foreground" />
               <input
                 id="password"
                 type="password"
