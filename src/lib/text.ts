@@ -9,15 +9,23 @@ export interface RhymeDetails {
   fragment: string | null;
 }
 
-const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
-const MULTIPLE_SPACES = /\s+/g;
+const CONTROL_CHARS_EXCEPT_LINE_FEED = /[\u0000-\u0009\u000B-\u001F\u007F]/g;
+const WHITESPACE_EXCEPT_LINE_FEED = /[^\S\n]+/g;
 const RHYME_WORD_REGEX = /[a-zA-Z']+/g;
 
 /**
  * Normalizes arbitrary user input so it can be shared safely between the client and server.
  */
 export function sanitize(input: string): string {
-  return input.normalize("NFKC").replace(CONTROL_CHARS, " ").replace(MULTIPLE_SPACES, " ").trim();
+  return input
+    .normalize("NFKC")
+    .replace(/\r\n?/g, "\n")
+    .replace(CONTROL_CHARS_EXCEPT_LINE_FEED, " ")
+    .replace(WHITESPACE_EXCEPT_LINE_FEED, " ")
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .trim();
 }
 
 /**
@@ -29,7 +37,7 @@ export function wordCount(input: string): number {
     return 0;
   }
 
-  return normalized.split(" ").length;
+  return normalized.split(/\s+/).filter(Boolean).length;
 }
 
 function extractLastWord(input: string): string | null {

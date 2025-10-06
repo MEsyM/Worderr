@@ -77,7 +77,9 @@ function TurnCard({ turn, viewerId, authorName }: TurnCardProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm leading-relaxed text-muted-foreground">{turn.content}</p>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+          {turn.content}
+        </p>
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           <span className="font-medium text-foreground">By {authorName}</span>
           <VoteBar turn={turn} viewerId={viewerId} />
