@@ -58,6 +58,15 @@ async function main() {
       code: "DEMO123",
       description: "A seeded session showcasing LingvoJam's core data model.",
       status: RoomStatus.ACTIVE,
+      prompts: [
+        "Kick off the story with a mysterious word.",
+        "Shift perspective to another character.",
+        "Close the scene with a question that lingers.",
+      ],
+      maxWords: 40,
+      maxSentences: 2,
+      forbiddenWords: ["boring", "skip"],
+      rhymeTarget: "golden",
       host: { connect: { id: host.id } },
       memberships: {
         create: [

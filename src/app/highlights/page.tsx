@@ -2,15 +2,15 @@ import { Metadata } from "next";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { listHighlights, getRoomSnapshot } from "@/lib/rooms";
+import { listHighlights } from "@/lib/server/rooms";
 
 export const metadata: Metadata = {
   title: "Highlights",
   description: "Top turns and memorable prompts from across the LingvoJam community.",
 };
 
-export default function HighlightsPage() {
-  const highlights = listHighlights();
+export default async function HighlightsPage() {
+  const highlights = await listHighlights();
 
   return (
     <div className="space-y-8">
@@ -21,30 +21,22 @@ export default function HighlightsPage() {
         </p>
       </header>
       <div className="grid gap-6 sm:grid-cols-2">
-        {highlights.map((highlight) => {
-          const room = getRoomSnapshot(highlight.roomId);
-          return (
-            <Card key={highlight.id} className="h-full">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between text-lg">
-                  {highlight.title}
-                  {room && <Badge variant="outline">{room.code}</Badge>}
-                </CardTitle>
-                <CardDescription className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {room?.title ?? "Unknown room"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <p className="leading-relaxed text-muted-foreground">{highlight.excerpt}</p>
-                {room && (
-                  <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-                    Prompt inspiration: {room.prompts[0]}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+        {highlights.map((highlight) => (
+          <Card key={highlight.id} className="h-full">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between text-lg">
+                {highlight.title}
+                <Badge variant="outline">{highlight.roomCode}</Badge>
+              </CardTitle>
+              <CardDescription className="text-xs uppercase tracking-wide text-muted-foreground">
+                {highlight.roomTitle}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <p className="leading-relaxed text-muted-foreground">{highlight.excerpt}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { RoomRole } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -39,11 +40,36 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { title, description } = body ?? {};
+    const {
+      title,
+      description,
+      prompts: rawPrompts,
+      maxWords,
+      maxSentences,
+      forbiddenWords: rawForbiddenWords,
+      rhymeTarget,
+    } = body ?? {};
 
     if (!title || typeof title !== "string") {
       return NextResponse.json({ error: "A room title is required." }, { status: 400 });
     }
+
+    const prompts = Array.isArray(rawPrompts)
+      ? rawPrompts
+          .map((prompt) => (typeof prompt === "string" ? prompt.trim() : ""))
+          .filter((prompt) => prompt.length > 0)
+      : [];
+
+    const forbiddenWords = Array.isArray(rawForbiddenWords)
+      ? rawForbiddenWords
+          .map((word) => (typeof word === "string" ? word.trim() : ""))
+          .filter((word) => word.length > 0)
+      : [];
+
+    const parsedMaxWords = Number.isInteger(maxWords) ? Number(maxWords) : 40;
+    const parsedMaxSentences = Number.isInteger(maxSentences) ? Number(maxSentences) : 2;
+    const normalizedRhymeTarget =
+      typeof rhymeTarget === "string" && rhymeTarget.trim().length > 0 ? rhymeTarget.trim() : null;
 
     const code = await createRoomCode();
 
@@ -53,6 +79,23 @@ export async function POST(request: Request) {
         description: description ?? null,
         hostId: session.user.id,
         code,
+        prompts,
+        maxWords: Math.max(10, Math.min(parsedMaxWords, 200)),
+        maxSentences: Math.max(1, Math.min(parsedMaxSentences, 8)),
+        forbiddenWords,
+        rhymeTarget: normalizedRhymeTarget,
+        memberships: {
+          create: {
+            userId: session.user.id,
+            role: RoomRole.HOST,
+          },
+        },
+      },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        description: true,
       },
     });
 

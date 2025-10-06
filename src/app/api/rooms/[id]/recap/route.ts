@@ -1,14 +1,15 @@
 import { NextRequest } from "next/server";
 import { chromium } from "playwright-core";
 
-import { buildRoomRecap, roomRuleLabel } from "@/lib/rooms";
+import { roomRuleLabel } from "@/lib/rooms";
+import { buildRoomRecap } from "@/lib/server/rooms";
 
 interface RouteParams {
   params: { id: string };
 }
 
-function buildTextRecap(id: string) {
-  const recap = buildRoomRecap(id);
+async function buildTextRecap(id: string) {
+  const recap = await buildRoomRecap(id);
   if (!recap) {
     return null;
   }
@@ -35,8 +36,8 @@ function buildTextRecap(id: string) {
   return lines.join("\n");
 }
 
-function buildHtmlRecap(id: string) {
-  const recap = buildRoomRecap(id);
+async function buildHtmlRecap(id: string) {
+  const recap = await buildRoomRecap(id);
   if (!recap) {
     return null;
   }
@@ -79,7 +80,7 @@ function buildHtmlRecap(id: string) {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const format = request.nextUrl.searchParams.get("format") ?? "pdf";
-  const textRecap = buildTextRecap(params.id);
+  const textRecap = await buildTextRecap(params.id);
 
   if (!textRecap) {
     return new Response("Room not found", { status: 404 });
@@ -93,7 +94,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
   }
 
-  const html = buildHtmlRecap(params.id);
+  const html = await buildHtmlRecap(params.id);
   if (!html) {
     return new Response("Room not found", { status: 404 });
   }

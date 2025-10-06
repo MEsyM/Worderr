@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Loader2, LockKeyhole, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ interface FormState {
   maxSentences: number;
   forbiddenWords: string;
   rhymeTarget: string;
+  prompts: string;
 }
 
 const DEFAULT_STATE: FormState = {
@@ -36,10 +38,16 @@ const DEFAULT_STATE: FormState = {
   maxSentences: 2,
   forbiddenWords: "boring, skip",
   rhymeTarget: "velvet",
+  prompts: [
+    'Wordplay warmup: riff on "midnight sparks"',
+    'Respond with a line that rhymes with "velvet"',
+    "Invent a rule for round three",
+  ].join("\n"),
 };
 
 export function RoomForm() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [state, setState] = React.useState<FormState>(DEFAULT_STATE);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -75,12 +83,26 @@ export function RoomForm() {
     setIsSubmitting(true);
 
     try {
+      const forbidden = state.forbiddenWords
+        .split(",")
+        .map((word) => word.trim())
+        .filter(Boolean);
+      const prompts = state.prompts
+        .split("\n")
+        .map((prompt) => prompt.trim())
+        .filter(Boolean);
+
       const response = await fetch("/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: state.title,
           description: state.description,
+          prompts,
+          maxWords: state.maxWords,
+          maxSentences: state.maxSentences,
+          forbiddenWords: forbidden,
+          rhymeTarget: state.mode === "crew" ? state.rhymeTarget.trim() : "",
         }),
       });
 
@@ -93,7 +115,7 @@ export function RoomForm() {
         title: "Room created",
         description: `Room ${room.code} is ready. Share the code with your crew!`,
       });
-      setState(() => ({ ...DEFAULT_STATE }));
+      router.push(`/r/${room.id}`);
     } catch (error) {
       console.error(error);
       toast({
@@ -154,6 +176,16 @@ export function RoomForm() {
                 setState((prev) => ({ ...prev, description: event.target.value }))
               }
               className="min-h-[100px] w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              disabled={!session?.user?.id}
+            />
+          </div>
+          <div className="grid gap-3">
+            <label className="text-sm font-medium">Prompts (one per line)</label>
+            <textarea
+              value={state.prompts}
+              onChange={(event) => setState((prev) => ({ ...prev, prompts: event.target.value }))}
+              className="min-h-[120px] w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              placeholder={'Wordplay warmup: riff on "midnight sparks"'}
               disabled={!session?.user?.id}
             />
           </div>
