@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -28,8 +29,17 @@ async function createRoomCode(): Promise<string> {
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "You must be signed in to create a room." },
+        { status: 401 },
+      );
+    }
+
     const body = await request.json();
-    const { title, description, hostId } = body ?? {};
+    const { title, description } = body ?? {};
 
     if (!title || typeof title !== "string") {
       return NextResponse.json({ error: "A room title is required." }, { status: 400 });
@@ -41,7 +51,7 @@ export async function POST(request: Request) {
       data: {
         title,
         description: description ?? null,
-        hostId: hostId ?? null,
+        hostId: session.user.id,
         code,
       },
     });

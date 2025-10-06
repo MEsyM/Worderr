@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { PrismaClient, RoomRole, RoomStatus, UserRole } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -13,11 +14,14 @@ async function main() {
   await prisma.verificationToken.deleteMany();
   await prisma.user.deleteMany();
 
+  const passwordHash = await bcrypt.hash("Password123!", 12);
+
   const admin = await prisma.user.create({
     data: {
       email: "admin@example.com",
       name: "Admin Director",
       role: UserRole.ADMIN,
+      passwordHash,
     },
   });
 
@@ -26,6 +30,7 @@ async function main() {
       email: "director@example.com",
       name: "Director Dana",
       role: UserRole.DIRECTOR,
+      passwordHash,
     },
   });
 
@@ -34,6 +39,7 @@ async function main() {
       email: "host@example.com",
       name: "Host Harper",
       role: UserRole.HOST,
+      passwordHash,
     },
   });
 
@@ -42,6 +48,7 @@ async function main() {
       email: "player@example.com",
       name: "Player Parker",
       role: UserRole.PLAYER,
+      passwordHash,
     },
   });
 

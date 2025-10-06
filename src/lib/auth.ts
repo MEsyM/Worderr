@@ -1,6 +1,8 @@
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import Credentials from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
+import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
 
@@ -21,6 +23,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   trustHost: true,
   providers: [
+    Credentials({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error("Missing email or password");
+        }
+
+        const normalizedEmail = credentials.email.toLowerCase();
+        const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+        if (!user?.passwordHash) {
+          throw new Error("Invalid email or password");
+        }
+
+        const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
+
+        if (!isValid) {
+          throw new Error("Invalid email or password");
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        };
+      },
+    }),
     EmailProvider({
       from: requiredEnv("EMAIL_FROM"),
       server: {
@@ -34,10 +68,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    session({ session, user }) {
+    async session({ session, user }) {
       if (session.user) {
-        session.user.id = user.id;
-        session.user.role = user.role;
+        const sourceUser =
+          user ??
+          (session.user.email
+            ? await prisma.user.findUnique({ where: { email: session.user.email } })
+            : null);
+        if (sourceUser) {
+          session.user.id = sourceUser.id;
+          session.user.role = sourceUser.role;
+          session.user.name = sourceUser.name;
+          session.user.email = sourceUser.email;
+        }
       }
       return session;
     },

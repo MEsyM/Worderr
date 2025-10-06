@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, LockKeyhole, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +39,7 @@ const DEFAULT_STATE: FormState = {
 };
 
 export function RoomForm() {
+  const { data: session, status } = useSession();
   const [state, setState] = React.useState<FormState>(DEFAULT_STATE);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -60,6 +63,15 @@ export function RoomForm() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!session?.user?.id) {
+      toast({
+        title: "Sign in required",
+        description: "Create an account or log in before launching a room.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -69,7 +81,6 @@ export function RoomForm() {
         body: JSON.stringify({
           title: state.title,
           description: state.description,
-          hostId: "demo-host",
         }),
       });
 
@@ -87,7 +98,7 @@ export function RoomForm() {
       console.error(error);
       toast({
         title: "Unable to create room",
-        description: "Please try again in a moment.",
+        description: error instanceof Error ? error.message : "Please try again in a moment.",
         variant: "destructive",
       });
     } finally {
@@ -105,6 +116,25 @@ export function RoomForm() {
           <CardDescription>Configure the vibe and publish your room in seconds.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {!session?.user?.id && status !== "loading" ? (
+            <div className="flex items-start gap-3 rounded-md border border-dashed bg-muted/30 p-4 text-sm">
+              <LockKeyhole className="mt-0.5 h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="font-medium">Sign in to launch your room</p>
+                <p className="text-muted-foreground">
+                  You&apos;ll need an account before publishing.{" "}
+                  <Link href="/register" className="font-medium underline">
+                    Create one now
+                  </Link>{" "}
+                  or{" "}
+                  <Link href="/login" className="font-medium underline">
+                    log in
+                  </Link>
+                  .
+                </p>
+              </div>
+            </div>
+          ) : null}
           <div className="grid gap-3">
             <label className="text-sm font-medium">Room title</label>
             <input
@@ -113,6 +143,7 @@ export function RoomForm() {
               className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               placeholder="e.g. Friday Flash Chorus"
               required
+              disabled={!session?.user?.id}
             />
           </div>
           <div className="grid gap-3">
@@ -123,6 +154,7 @@ export function RoomForm() {
                 setState((prev) => ({ ...prev, description: event.target.value }))
               }
               className="min-h-[100px] w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              disabled={!session?.user?.id}
             />
           </div>
           <div className="grid gap-3">
@@ -132,6 +164,7 @@ export function RoomForm() {
                 type="button"
                 variant={state.mode === "solo" ? "secondary" : "outline"}
                 onClick={() => setState((prev) => ({ ...prev, mode: "solo" }))}
+                disabled={!session?.user?.id}
               >
                 Solo practice
               </Button>
@@ -139,6 +172,7 @@ export function RoomForm() {
                 type="button"
                 variant={state.mode === "crew" ? "secondary" : "outline"}
                 onClick={() => setState((prev) => ({ ...prev, mode: "crew" }))}
+                disabled={!session?.user?.id}
               >
                 Crew battle
               </Button>
@@ -156,6 +190,7 @@ export function RoomForm() {
                   setState((prev) => ({ ...prev, maxWords: Number(event.target.value) }))
                 }
                 className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                disabled={!session?.user?.id}
               />
             </div>
             <div className="grid gap-2">
@@ -169,6 +204,7 @@ export function RoomForm() {
                   setState((prev) => ({ ...prev, maxSentences: Number(event.target.value) }))
                 }
                 className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                disabled={!session?.user?.id}
               />
             </div>
           </div>
@@ -182,6 +218,7 @@ export function RoomForm() {
                 }
                 className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 placeholder="Comma separated"
+                disabled={!session?.user?.id}
               />
             </div>
             <div className="grid gap-2">
@@ -192,19 +229,24 @@ export function RoomForm() {
                   setState((prev) => ({ ...prev, rhymeTarget: event.target.value }))
                 }
                 className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                disabled={state.mode === "solo"}
+                disabled={state.mode === "solo" || !session?.user?.id}
               />
             </div>
           </div>
           <div>
             <p className="text-sm font-medium">Preview rules</p>
-            <RuleBadges rules={rules} className="mt-2" />
+            <RuleBadges rules={rules} className="mt-2 flex flex-wrap items-center gap-2" />
           </div>
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Launch room
+          <Button type="submit" disabled={isSubmitting || !session?.user?.id}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating
+              </>
+            ) : (
+              "Create room"
+            )}
           </Button>
         </CardFooter>
       </form>
