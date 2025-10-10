@@ -10,19 +10,24 @@ import type { RoomTurn } from "@/lib/rooms";
 
 interface VoteBarProps {
   turn: RoomTurn;
-  viewerId: string;
+  viewerId?: string;
+  canVote: boolean;
 }
 
-export function VoteBar({ turn, viewerId }: VoteBarProps) {
+export function VoteBar({ turn, viewerId, canVote }: VoteBarProps) {
   const { castVote } = useRoom();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const positiveVotes = turn.votes.filter((vote) => vote.value > 0).length;
   const totalVotes = turn.votes.length;
   const percentage = totalVotes > 0 ? Math.round((positiveVotes / totalVotes) * 100) : 0;
-  const viewerVote = turn.votes.find((vote) => vote.voterId === viewerId)?.value ?? 0;
+  const viewerVote = viewerId
+    ? (turn.votes.find((vote) => vote.voterId === viewerId)?.value ?? 0)
+    : 0;
+
+  const interactionDisabled = isSubmitting || !canVote || !viewerId;
 
   const handleVote = async (value: number) => {
-    if (isSubmitting) {
+    if (interactionDisabled || !viewerId) {
       return;
     }
     setIsSubmitting(true);
@@ -51,7 +56,7 @@ export function VoteBar({ turn, viewerId }: VoteBarProps) {
           type="button"
           variant={viewerVote > 0 ? "secondary" : "outline"}
           size="sm"
-          disabled={isSubmitting}
+          disabled={interactionDisabled}
           onClick={() => handleVote(viewerVote > 0 ? 0 : 1)}
         >
           <ArrowBigUp className="mr-2 h-4 w-4" /> Cheer
@@ -60,7 +65,7 @@ export function VoteBar({ turn, viewerId }: VoteBarProps) {
           type="button"
           variant={viewerVote < 0 ? "destructive" : "outline"}
           size="sm"
-          disabled={isSubmitting}
+          disabled={interactionDisabled}
           onClick={() => handleVote(viewerVote < 0 ? 0 : -1)}
         >
           <ArrowBigDown className="mr-2 h-4 w-4" /> Skip

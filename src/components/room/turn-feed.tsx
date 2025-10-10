@@ -10,10 +10,11 @@ import { useRoom } from "@/components/room/room-provider";
 import type { RoomTurn } from "@/lib/rooms";
 
 interface TurnFeedProps {
-  viewerId: string;
+  viewerId?: string;
+  canVote: boolean;
 }
 
-export function TurnFeed({ viewerId }: TurnFeedProps) {
+export function TurnFeed({ viewerId, canVote }: TurnFeedProps) {
   const { turns, participants } = useRoom();
   const authorLookup = React.useMemo(() => {
     const map = new Map(participants.map((participant) => [participant.id, participant]));
@@ -42,6 +43,7 @@ export function TurnFeed({ viewerId }: TurnFeedProps) {
           key={turn.id}
           turn={turn}
           viewerId={viewerId}
+          canVote={canVote}
           authorName={authorLookup.get(turn.authorId)?.name ?? "Unknown"}
         />
       ))}
@@ -51,11 +53,12 @@ export function TurnFeed({ viewerId }: TurnFeedProps) {
 
 interface TurnCardProps {
   turn: RoomTurn;
-  viewerId: string;
+  viewerId?: string;
+  canVote: boolean;
   authorName: string;
 }
 
-function TurnCard({ turn, viewerId, authorName }: TurnCardProps) {
+function TurnCard({ turn, viewerId, canVote, authorName }: TurnCardProps) {
   const timestamp = new Date(turn.publishedAt ?? turn.createdAt);
   const timeAgo = formatDistanceToNow(timestamp);
   const statusVariant =
@@ -82,7 +85,7 @@ function TurnCard({ turn, viewerId, authorName }: TurnCardProps) {
         </p>
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           <span className="font-medium text-foreground">By {authorName}</span>
-          <VoteBar turn={turn} viewerId={viewerId} />
+          <VoteBar turn={turn} viewerId={viewerId} canVote={canVote} />
         </div>
       </CardContent>
     </Card>

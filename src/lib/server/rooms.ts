@@ -302,3 +302,22 @@ export async function ensureMembership(roomId: string, userId: string) {
     throw new Error("User is not a member of this room");
   }
 }
+
+export async function joinRoom(roomId: string, userId: string, role?: RoomRole) {
+  await prisma.membership.upsert({
+    where: {
+      userId_roomId: {
+        userId,
+        roomId,
+      },
+    },
+    update: {
+      role: role ?? undefined,
+    },
+    create: {
+      userId,
+      roomId,
+      role: role ?? undefined,
+    },
+  });
+}
