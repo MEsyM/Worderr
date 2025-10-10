@@ -61,7 +61,10 @@ export async function ensureTurnState(
       : undefined;
 
     if (!currentMember) {
-      const assigned = activeMembers[0];
+      const assigned = selectNextActiveMembership(activeMembers);
+      if (!assigned) {
+        break;
+      }
       state = await tx.room.update({
         where: { id: state.id },
         data: {
@@ -98,6 +101,21 @@ export async function ensureTurnState(
           data: { currentTurnMembershipId: null, currentTurnStartedAt: null },
           include: TURN_STATE_INCLUDE,
         });
+
+        const updatedActiveMembers = state.memberships.filter((membership) => membership.isActive);
+        const nextMembership = selectNextActiveMembership(updatedActiveMembers, currentMember.id);
+
+        if (nextMembership) {
+          state = await tx.room.update({
+            where: { id: state.id },
+            data: {
+              currentTurnMembershipId: nextMembership.id,
+              currentTurnStartedAt: now,
+            },
+            include: TURN_STATE_INCLUDE,
+          });
+        }
+
         continue;
       }
     }
@@ -124,20 +142,7 @@ export async function advanceTurn(
   }
 
   const currentId = room.currentTurnMembershipId;
-  let nextMembership: Membership | undefined;
-
-  if (!currentId) {
-    nextMembership = activeMembers[0];
-  } else {
-    const index = activeMembers.findIndex((membership) => membership.id === currentId);
-    if (index === -1) {
-      nextMembership = activeMembers[0];
-    } else if (activeMembers.length === 1) {
-      nextMembership = activeMembers[0];
-    } else {
-      nextMembership = activeMembers[(index + 1) % activeMembers.length];
-    }
-  }
+  const nextMembership = selectNextActiveMembership(activeMembers, currentId);
 
   return tx.room.update({
     where: { id: room.id },
@@ -149,6 +154,27 @@ export async function advanceTurn(
       : { currentTurnMembershipId: null, currentTurnStartedAt: null },
     include: TURN_STATE_INCLUDE,
   });
+}
+
+function selectNextActiveMembership(
+  activeMembers: Membership[],
+  fromMembershipId?: string,
+): Membership | undefined {
+  if (activeMembers.length === 0) {
+    return undefined;
+  }
+
+  if (!fromMembershipId) {
+    return activeMembers[0];
+  }
+
+  const index = activeMembers.findIndex((membership) => membership.id === fromMembershipId);
+
+  if (index === -1 || activeMembers.length === 1) {
+    return activeMembers[0];
+  }
+
+  return activeMembers[(index + 1) % activeMembers.length];
 }
 
 export function clampTurnSeconds(seconds: number): number {
