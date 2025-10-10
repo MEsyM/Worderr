@@ -32,11 +32,18 @@ export default async function RoomPage({ params }: RoomPageProps) {
   }
 
   const session = await auth();
-  const viewerId = session?.user?.id ?? snapshot.participants[0]?.id;
+  const viewer = session?.user
+    ? {
+        id: session.user.id,
+        name: session.user.name ?? null,
+        image: session.user.image ?? null,
+      }
+    : null;
+  const providerKey = `${snapshot.id}:${snapshot.participants.length}:${snapshot.turns.length}`;
 
   return (
-    <RoomProvider room={snapshot}>
-      <RoomExperience viewerId={viewerId ?? undefined} />
+    <RoomProvider key={providerKey} room={snapshot}>
+      <RoomExperience viewer={viewer ?? undefined} />
     </RoomProvider>
   );
 }

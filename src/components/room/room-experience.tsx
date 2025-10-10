@@ -1,7 +1,19 @@
 "use client";
-import { Users } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
 
-import { Card, CardContent } from "@/components/ui/card";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import * as React from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { RuleBadges } from "@/components/room/rule-badges";
 import { RoomTimer } from "@/components/room/timer";
 import { TurnComposer } from "@/components/room/turn-composer";
@@ -10,15 +22,60 @@ import { ScorePills } from "@/components/room/score-pills";
 import { RecapView } from "@/components/room/recap-view";
 import { useRoom } from "@/components/room/room-provider";
 import { TurnStory } from "@/components/room/turn-story";
+import { toast } from "@/components/ui/use-toast";
 
 interface RoomExperienceProps {
-  viewerId?: string;
+  viewer?: {
+    id: string;
+    name?: string | null;
+    image?: string | null;
+  };
 }
 
-export function RoomExperience({ viewerId }: RoomExperienceProps) {
+export function RoomExperience({ viewer }: RoomExperienceProps) {
   const { room, participants } = useRoom();
-  const fallbackViewer = participants[0]?.id;
-  const resolvedViewerId = viewerId ?? fallbackViewer ?? "";
+  const router = useRouter();
+  const viewerId = viewer?.id;
+  const isParticipant = viewerId
+    ? participants.some((participant) => participant.id === viewerId)
+    : false;
+  const [isJoining, setIsJoining] = React.useState(false);
+  const resolvedViewerId = isParticipant ? viewerId : undefined;
+  const canVote = Boolean(resolvedViewerId);
+
+  const handleJoin = React.useCallback(async () => {
+    if (!viewerId || isParticipant || isJoining) {
+      return;
+    }
+
+    setIsJoining(true);
+    try {
+      const response = await fetch(`/api/rooms/${room.id}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: viewerId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to join room");
+      }
+
+      toast({
+        title: "You're in!",
+        description: "Welcome to the room. Take the next turn when it's yours.",
+      });
+      router.refresh();
+    } catch (error) {
+      console.error("joinRoom failed", error);
+      toast({
+        title: "Unable to join",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsJoining(false);
+    }
+  }, [isJoining, isParticipant, room.id, router, viewerId]);
 
   return (
     <div className="space-y-6">
@@ -43,11 +100,44 @@ export function RoomExperience({ viewerId }: RoomExperienceProps) {
       <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-6">
           <TurnStory />
-          <TurnComposer />
+          {isParticipant ? (
+            <TurnComposer />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Join this room</CardTitle>
+                <CardDescription>
+                  {viewer?.name
+                    ? `${viewer.name}, jump in to add your twists to the story.`
+                    : "Sign in to add your twists to the story."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Joining lets you submit turns, cheer on other players, and collect points.
+              </CardContent>
+              <CardFooter className="flex flex-wrap items-center justify-between gap-3">
+                {viewerId ? (
+                  <Button type="button" onClick={handleJoin} disabled={isJoining}>
+                    {isJoining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Join the room
+                  </Button>
+                ) : (
+                  <Button type="button" asChild>
+                    <Link href="/login">Sign in to join</Link>
+                  </Button>
+                )}
+                {!viewerId && (
+                  <p className="text-xs text-muted-foreground">
+                    You need an account to participate in the story.
+                  </p>
+                )}
+              </CardFooter>
+            </Card>
+          )}
         </div>
         <div className="space-y-6">
           <ScorePills />
-          <TurnFeed viewerId={resolvedViewerId} />
+          <TurnFeed viewerId={resolvedViewerId} canVote={canVote} />
           <RecapView />
         </div>
       </div>
