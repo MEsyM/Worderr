@@ -2,7 +2,9 @@ export type RoomRule =
   | { type: "maxWords"; value: number }
   | { type: "maxSentences"; value: number }
   | { type: "forbidden"; value: string[] }
-  | { type: "rhyme"; value: string };
+  | { type: "rhyme"; value: string }
+  | { type: "turnTimer"; value: number }
+  | { type: "maxWarnings"; value: number };
 
 export interface RoomParticipant {
   id: string;
@@ -10,6 +12,8 @@ export interface RoomParticipant {
   avatar?: string;
   score: number;
   isHost?: boolean;
+  warnings: number;
+  isActive: boolean;
 }
 
 export type TurnStatus = "proposed" | "validated" | "published";
@@ -49,6 +53,17 @@ export interface RoomSnapshot {
   rules: RoomRule[];
   prompts: string[];
   highlights: RoomHighlight[];
+  maxTurnSeconds: number;
+  maxWarnings: number;
+  currentTurn?: RoomCurrentTurn;
+}
+
+export interface RoomCurrentTurn {
+  membershipId: string;
+  userId: string;
+  startedAt: string;
+  dueAt?: string;
+  warnings: number;
 }
 
 export type RoomRecap = {
@@ -131,6 +146,23 @@ export function roomRuleLabel(rule: RoomRule): string {
       return `Avoid: ${rule.value.join(", ")}`;
     case "rhyme":
       return `Rhyme with \"${rule.value}\"`;
+    case "turnTimer": {
+      if (rule.value === 0) {
+        return "No turn timer";
+      }
+      const minutes = Math.round(rule.value / 60);
+      if (minutes < 60) {
+        return `${minutes} min per turn`;
+      }
+      const hours = rule.value / 3600;
+      if (hours < 24) {
+        return `${Math.round(hours)} hr per turn`;
+      }
+      const days = rule.value / 86400;
+      return `${Math.round(days)} day turn limit`;
+    }
+    case "maxWarnings":
+      return `${rule.value} warning limit`;
     default:
       return "Special rule";
   }

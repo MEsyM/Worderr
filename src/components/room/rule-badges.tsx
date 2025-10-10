@@ -40,6 +40,19 @@ function formatRule(rule: RoomRule) {
       return `Avoid: ${rule.value.join(", ")}`;
     case "rhyme":
       return `Rhyme with \"${rule.value}\"`;
+    case "turnTimer":
+      if (rule.value === 0) {
+        return "No turn timer";
+      }
+      if (rule.value < 3600) {
+        return `${Math.round(rule.value / 60)} min turns`;
+      }
+      if (rule.value < 86400) {
+        return `${Math.round(rule.value / 3600)} hr turns`;
+      }
+      return `${Math.round(rule.value / 86400)} day turns`;
+    case "maxWarnings":
+      return `${rule.value} warning limit`;
     default:
       return "Special rule";
   }

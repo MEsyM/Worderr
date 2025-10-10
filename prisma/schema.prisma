@@ -93,12 +93,17 @@ model Room {
   maxSentences   Int        @default(2)
   forbiddenWords String[]   @default([])
   rhymeTarget    String?
+  maxTurnSeconds Int        @default(0)
+  maxWarnings    Int        @default(3)
+  currentTurnMembershipId String? @unique
+  currentTurnStartedAt    DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   host        User?         @relation("HostedRooms", fields: [hostId], references: [id], onDelete: SetNull)
   memberships Membership[]
   turns       Turn[]
   summaries   Summary[]
+  currentTurnMembership Membership? @relation("RoomCurrentTurn", fields: [currentTurnMembershipId], references: [id])
 
   @@index([hostId])
 }
@@ -109,8 +114,12 @@ model Membership {
   roomId    String
   role      RoomRole  @default(PLAYER)
   joinedAt  DateTime  @default(now())
+  warnings  Int       @default(0)
+  isActive  Boolean   @default(true)
+  kickedAt  DateTime?
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   room      Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  activeTurn Room?    @relation("RoomCurrentTurn")
 
   @@unique([userId, roomId])
   @@index([roomId])
