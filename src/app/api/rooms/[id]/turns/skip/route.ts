@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { toRoomTurn } from "@/lib/server/rooms";
 import {
   advanceTurn,
   ensureTurnState,
@@ -15,19 +14,13 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function POST(request: Request, context: RouteParams) {
+export async function POST(_request: Request, context: RouteParams) {
   const params = await context.params;
+
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { content, prompt } = body ?? {};
-
-    if (!content || typeof content !== "string") {
-      return NextResponse.json({ error: "Turn content is required." }, { status: 400 });
     }
 
     const now = new Date();
@@ -40,7 +33,7 @@ export async function POST(request: Request, context: RouteParams) {
 
       const membership = roomState.memberships.find((entry) => entry.userId === session.user.id);
       if (!membership) {
-        throw new ApiError(403, "Join the room before submitting turns.");
+        throw new ApiError(403, "Join the room before skipping turns.");
       }
 
       if (!membership.isActive) {
@@ -64,32 +57,9 @@ export async function POST(request: Request, context: RouteParams) {
         throw new ApiError(409, "It is not your turn.", { timeoutEvents: events });
       }
 
-      const latestTurn = await tx.turn.findFirst({
-        where: { roomId: params.id },
-        orderBy: { round: "desc" },
-        select: { round: true },
-      });
-      const nextRound = (latestTurn?.round ?? 0) + 1;
+      const nextRoom = await advanceTurn(tx, syncedRoom, now);
 
-      const created = await tx.turn.create({
-        data: {
-          roomId: params.id,
-          authorId: session.user.id,
-          round: nextRound,
-          prompt: typeof prompt === "string" ? prompt : "",
-          content,
-          endedAt: now,
-        },
-        include: { votes: true },
-      });
-
-      const advancedRoom = await advanceTurn(tx, syncedRoom, now);
-
-      return {
-        created,
-        timeoutEvents: events,
-        nextRoomState: advancedRoom,
-      };
+      return { timeoutEvents: events, nextRoomState: nextRoom };
     });
 
     const currentTurn = serializeCurrentTurn(result.nextRoomState);
@@ -101,13 +71,8 @@ export async function POST(request: Request, context: RouteParams) {
     }));
 
     return NextResponse.json(
-      {
-        turn: toRoomTurn(result.created),
-        currentTurn,
-        memberships,
-        timeoutEvents: result.timeoutEvents,
-      },
-      { status: 201 },
+      { currentTurn, memberships, timeoutEvents: result.timeoutEvents },
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
@@ -116,7 +81,7 @@ export async function POST(request: Request, context: RouteParams) {
         { status: error.status },
       );
     }
-    console.error(`Failed to create turn for room ${params.id}`, error);
-    return NextResponse.json({ error: "Unable to submit turn." }, { status: 500 });
+    console.error(`Failed to skip turn for room ${params.id}`, error);
+    return NextResponse.json({ error: "Unable to skip turn." }, { status: 500 });
   }
 }

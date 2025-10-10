@@ -7,6 +7,7 @@ import {
   calculateParticipantScores,
   getSoloSuggestion,
   roomRuleLabel,
+  type RoomCurrentTurn,
   type RoomParticipant,
   type RoomRecap,
   type RoomRule,
@@ -19,162 +20,45 @@ interface TimerState {
   remaining: number;
   isRunning: boolean;
   startedAt?: string;
+  dueAt?: string;
 }
 
-interface RoomState {
-  snapshot: RoomSnapshot;
-  participants: RoomParticipant[];
-  turns: RoomTurn[];
-  currentPlayerIndex: number;
-  currentPromptIndex: number;
-  timer: TimerState;
-  suggestion?: string;
-  pendingAdvance: boolean;
+interface MembershipStatusUpdate {
+  membershipId: string;
+  userId: string;
+  warnings: number;
+  isActive: boolean;
 }
 
-type RoomAction =
-  | { type: "START_TIMER"; duration?: number }
-  | { type: "TICK" }
-  | { type: "STOP_TIMER" }
-  | { type: "ADVANCE_PLAYER"; suggestion?: string }
-  | { type: "UPSERT_TURN"; turn: RoomTurn }
-  | { type: "RESET_SUGGESTION" };
-
-function createInitialState(snapshot: RoomSnapshot): RoomState {
-  const sortedTurns = [...snapshot.turns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const participants = calculateParticipantScores(snapshot.participants, sortedTurns);
-  const publishedTurns = sortedTurns.filter((turn) => turn.status === "published");
-  const currentPlayerIndex =
-    participants.length > 0 ? publishedTurns.length % participants.length : 0;
-  const currentPromptIndex =
-    snapshot.prompts.length > 0 ? publishedTurns.length % snapshot.prompts.length : 0;
-
-  return {
-    snapshot,
-    participants,
-    turns: sortedTurns,
-    currentPlayerIndex,
-    currentPromptIndex,
-    timer: {
-      duration: 30,
-      remaining: 30,
-      isRunning: false,
-    },
-    pendingAdvance: false,
-  };
+interface SubmitTurnResponse {
+  turn: RoomTurn;
+  currentTurn?: RoomCurrentTurn;
+  memberships: MembershipStatusUpdate[];
+  timeoutEvents?: unknown;
 }
 
-function reducer(state: RoomState, action: RoomAction): RoomState {
-  switch (action.type) {
-    case "START_TIMER": {
-      const duration = action.duration ?? state.timer.duration;
-      return {
-        ...state,
-        timer: {
-          duration,
-          remaining: duration,
-          isRunning: true,
-          startedAt: new Date().toISOString(),
-        },
-        pendingAdvance: false,
-      };
-    }
-    case "TICK": {
-      if (!state.timer.isRunning) {
-        return state;
-      }
-
-      const nextRemaining = state.timer.remaining - 1;
-      if (nextRemaining <= 0) {
-        return {
-          ...state,
-          timer: {
-            ...state.timer,
-            remaining: 0,
-            isRunning: false,
-          },
-          pendingAdvance: true,
-        };
-      }
-
-      return {
-        ...state,
-        timer: {
-          ...state.timer,
-          remaining: nextRemaining,
-        },
-      };
-    }
-    case "STOP_TIMER": {
-      if (!state.timer.isRunning) {
-        return state;
-      }
-      return {
-        ...state,
-        timer: {
-          ...state.timer,
-          isRunning: false,
-        },
-      };
-    }
-    case "ADVANCE_PLAYER": {
-      if (state.participants.length === 0) {
-        return state;
-      }
-      const nextPlayerIndex = (state.currentPlayerIndex + 1) % state.participants.length;
-      const completedCycle = nextPlayerIndex === 0;
-      const promptCount = Math.max(state.snapshot.prompts.length, 1);
-      const nextPromptIndex = completedCycle
-        ? (state.currentPromptIndex + 1) % promptCount
-        : state.currentPromptIndex;
-
-      return {
-        ...state,
-        currentPlayerIndex: nextPlayerIndex,
-        currentPromptIndex: nextPromptIndex,
-        pendingAdvance: false,
-        suggestion: action.suggestion,
-      };
-    }
-    case "UPSERT_TURN": {
-      const turns = [...state.turns.filter((turn) => turn.id !== action.turn.id), action.turn].sort(
-        (a, b) => a.createdAt.localeCompare(b.createdAt),
-      );
-      const participants = calculateParticipantScores(state.snapshot.participants, turns);
-
-      return {
-        ...state,
-        turns,
-        participants,
-        suggestion: undefined,
-      };
-    }
-    case "RESET_SUGGESTION": {
-      return {
-        ...state,
-        suggestion: undefined,
-      };
-    }
-    default:
-      return state;
-  }
+interface SkipTurnResponse {
+  currentTurn?: RoomCurrentTurn;
+  memberships: MembershipStatusUpdate[];
+  timeoutEvents?: unknown;
 }
 
 interface RoomContextValue {
   room: RoomSnapshot;
+  viewerId?: string;
   participants: RoomParticipant[];
   turns: RoomTurn[];
   rules: RoomRule[];
   currentPlayer: RoomParticipant;
+  currentTurn?: RoomCurrentTurn;
   currentPrompt: string;
   timer: TimerState;
   suggestion?: string;
   recap: RoomRecap;
-  submitTurn: (input: { content: string; authorId: string }) => Promise<RoomTurn | null>;
+  canSubmit: boolean;
+  submitTurn: (input: { content: string }) => Promise<RoomTurn>;
+  skipTurn: () => Promise<void>;
   castVote: (turnId: string, voterId: string, value: number) => Promise<void>;
-  startTimer: (duration?: number) => void;
-  stopTimer: () => void;
-  advancePlayer: () => void;
   dismissSuggestion: () => void;
   describeRule: (rule: RoomRule) => string;
 }
@@ -183,115 +67,232 @@ const RoomContext = React.createContext<RoomContextValue | null>(null);
 
 interface RoomProviderProps {
   room: RoomSnapshot;
+  viewerId?: string;
   children: React.ReactNode;
 }
 
-export function RoomProvider({ room, children }: RoomProviderProps) {
-  const [state, dispatch] = React.useReducer(reducer, room, createInitialState);
+export function RoomProvider({ room, viewerId, children }: RoomProviderProps) {
+  const [turns, setTurns] = React.useState(() =>
+    [...room.turns].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    ),
+  );
+  const [participantMeta, setParticipantMeta] = React.useState(() => [...room.participants]);
+  const [currentTurn, setCurrentTurn] = React.useState<RoomCurrentTurn | undefined>(
+    room.currentTurn,
+  );
+  const [suggestion, setSuggestion] = React.useState<string | undefined>(() =>
+    room.participants.length <= 1 ? getSoloSuggestion() : undefined,
+  );
+
+  const participants = React.useMemo(
+    () => calculateParticipantScores(participantMeta, turns),
+    [participantMeta, turns],
+  );
+
+  const timerSnapshot = React.useMemo(
+    () => computeTimer(currentTurn, room.maxTurnSeconds),
+    [currentTurn, room.maxTurnSeconds],
+  );
+  const [timer, setTimer] = React.useState<TimerState>(timerSnapshot);
 
   React.useEffect(() => {
-    dispatch({ type: "START_TIMER", duration: 30 });
-  }, []);
+    setTimer(timerSnapshot);
+  }, [timerSnapshot]);
 
   React.useEffect(() => {
-    if (!state.timer.isRunning) {
+    if (!timer.dueAt || !timer.isRunning) {
       return undefined;
     }
 
     const interval = setInterval(() => {
-      dispatch({ type: "TICK" });
+      setTimer((previous) => {
+        if (!previous.dueAt) {
+          return previous;
+        }
+        const nextRemaining = Math.max(
+          0,
+          Math.round((new Date(previous.dueAt).getTime() - Date.now()) / 1000),
+        );
+        return {
+          ...previous,
+          remaining: nextRemaining,
+          isRunning: nextRemaining > 0,
+        };
+      });
     }, 1000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [state.timer.isRunning]);
+  }, [timer.dueAt, timer.isRunning]);
 
-  React.useEffect(() => {
-    if (!state.pendingAdvance) {
-      return;
+  const currentPrompt = React.useMemo(() => {
+    const publishedTurns = turns.filter((turn) => turn.status === "published");
+    if (room.prompts.length === 0) {
+      return "";
+    }
+    const index = publishedTurns.length % room.prompts.length;
+    return room.prompts[index] ?? room.prompts[0] ?? "";
+  }, [room.prompts, turns]);
+
+  const currentPlayer = React.useMemo<RoomParticipant>(() => {
+    if (currentTurn) {
+      const match = participants.find((participant) => participant.id === currentTurn.userId);
+      if (match) {
+        return match;
+      }
     }
 
-    const suggestion = state.participants.length <= 1 ? getSoloSuggestion() : undefined;
-    dispatch({ type: "ADVANCE_PLAYER", suggestion });
-    dispatch({ type: "START_TIMER", duration: 30 });
-  }, [state.pendingAdvance, state.participants.length]);
+    return (
+      participants.find((participant) => participant.isActive) ??
+      participants[0] ?? {
+        id: "unknown",
+        name: "No players",
+        score: 0,
+        warnings: 0,
+        isActive: false,
+      }
+    );
+  }, [currentTurn, participants]);
 
-  const value = React.useMemo<RoomContextValue>(() => {
-    const currentPlayer = state.participants[state.currentPlayerIndex] ?? state.participants[0];
-    const currentPrompt =
-      state.snapshot.prompts[state.currentPromptIndex] ?? state.snapshot.prompts[0] ?? "";
-    const recap = buildRecapFromSnapshot({
-      ...state.snapshot,
-      participants: state.participants,
-      turns: state.turns,
+  const recap = React.useMemo(
+    () =>
+      buildRecapFromSnapshot({
+        ...room,
+        participants,
+        turns,
+      }),
+    [participants, room, turns],
+  );
+
+  const canSubmit = React.useMemo(() => {
+    if (!viewerId || !currentTurn) {
+      return false;
+    }
+    const participant = participants.find((entry) => entry.id === viewerId);
+    return Boolean(participant?.isActive && currentTurn.userId === viewerId);
+  }, [currentTurn, participants, viewerId]);
+
+  const submitTurn = React.useCallback<RoomContextValue["submitTurn"]>(
+    async ({ content }) => {
+      const response = await fetch(`/api/rooms/${room.id}/turns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, prompt: currentPrompt }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Failed to submit turn.");
+      }
+
+      const data = (await response.json()) as SubmitTurnResponse;
+      setTurns((existing) =>
+        [...existing.filter((turn) => turn.id !== data.turn.id), data.turn].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        ),
+      );
+      if (data.memberships) {
+        setParticipantMeta((existing) => mergeMembershipUpdates(existing, data.memberships));
+      }
+      setCurrentTurn(data.currentTurn);
+      if (participants.length <= 1) {
+        setSuggestion(getSoloSuggestion());
+      } else {
+        setSuggestion(undefined);
+      }
+      return data.turn;
+    },
+    [currentPrompt, participants.length, room.id],
+  );
+
+  const skipTurn = React.useCallback(async () => {
+    const response = await fetch(`/api/rooms/${room.id}/turns/skip`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
     });
 
-    return {
-      room: state.snapshot,
-      participants: state.participants,
-      turns: state.turns,
-      rules: state.snapshot.rules,
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(payload?.error ?? "Unable to skip turn.");
+    }
+
+    const data = (await response.json()) as SkipTurnResponse;
+    if (data.memberships) {
+      setParticipantMeta((existing) => mergeMembershipUpdates(existing, data.memberships));
+    }
+    setCurrentTurn(data.currentTurn);
+    if (participants.length <= 1) {
+      setSuggestion(getSoloSuggestion());
+    } else {
+      setSuggestion(undefined);
+    }
+  }, [participants.length, room.id]);
+
+  const castVote = React.useCallback<RoomContextValue["castVote"]>(
+    async (turnId, _voterId, value) => {
+      try {
+        const response = await fetch(`/api/rooms/${room.id}/turns/${turnId}/vote`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value }),
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as { turn: RoomTurn };
+        setTurns((existing) =>
+          [...existing.filter((turn) => turn.id !== data.turn.id), data.turn].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          ),
+        );
+      } catch (error) {
+        console.error("castVote failed", error);
+      }
+    },
+    [room.id],
+  );
+
+  const value = React.useMemo<RoomContextValue>(
+    () => ({
+      room,
+      viewerId,
+      participants,
+      turns,
+      rules: room.rules,
+      currentPlayer,
+      currentTurn,
+      currentPrompt,
+      timer,
+      suggestion,
+      recap,
+      canSubmit,
+      submitTurn,
+      skipTurn,
+      castVote,
+      dismissSuggestion: () => setSuggestion(undefined),
+      describeRule: (rule: RoomRule) => roomRuleLabel(rule),
+    }),
+    [
+      canSubmit,
+      castVote,
       currentPlayer,
       currentPrompt,
-      timer: state.timer,
-      suggestion: state.suggestion,
+      currentTurn,
+      participants,
       recap,
-      submitTurn: async ({ content, authorId: _authorId }) => {
-        void _authorId;
-        try {
-          const response = await fetch(`/api/rooms/${state.snapshot.id}/turns`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content, prompt: currentPrompt }),
-          });
-
-          if (!response.ok) {
-            throw new Error("Failed to submit turn");
-          }
-
-          const data = (await response.json()) as { turn: RoomTurn };
-          dispatch({ type: "UPSERT_TURN", turn: data.turn });
-          dispatch({ type: "STOP_TIMER" });
-          const suggestion = state.participants.length <= 1 ? getSoloSuggestion() : undefined;
-          dispatch({ type: "ADVANCE_PLAYER", suggestion });
-          dispatch({ type: "START_TIMER", duration: 30 });
-          return data.turn;
-        } catch (error) {
-          console.error("submitTurn failed", error);
-          return null;
-        }
-      },
-      castVote: async (turnId, _voterId, value) => {
-        try {
-          const response = await fetch(`/api/rooms/${state.snapshot.id}/turns/${turnId}/vote`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ value }),
-          });
-
-          if (!response.ok) {
-            throw new Error("Failed to cast vote");
-          }
-
-          const data = (await response.json()) as { turn: RoomTurn };
-          dispatch({ type: "UPSERT_TURN", turn: data.turn });
-        } catch (error) {
-          console.error("castVote failed", error);
-        }
-      },
-      startTimer: (duration?: number) => dispatch({ type: "START_TIMER", duration }),
-      stopTimer: () => dispatch({ type: "STOP_TIMER" }),
-      advancePlayer: () => {
-        dispatch({ type: "STOP_TIMER" });
-        const suggestion = state.participants.length <= 1 ? getSoloSuggestion() : undefined;
-        dispatch({ type: "ADVANCE_PLAYER", suggestion });
-        dispatch({ type: "START_TIMER", duration: 30 });
-      },
-      dismissSuggestion: () => dispatch({ type: "RESET_SUGGESTION" }),
-      describeRule: (rule: RoomRule) => roomRuleLabel(rule),
-    };
-  }, [state]);
+      room,
+      skipTurn,
+      submitTurn,
+      suggestion,
+      timer,
+      turns,
+      viewerId,
+    ],
+  );
 
   return <RoomContext.Provider value={value}>{children}</RoomContext.Provider>;
 }
@@ -302,4 +303,71 @@ export function useRoom() {
     throw new Error("useRoom must be used within a RoomProvider");
   }
   return context;
+}
+
+function computeTimer(
+  currentTurn: RoomCurrentTurn | undefined,
+  maxTurnSeconds: number,
+): TimerState {
+  const duration = Math.max(0, maxTurnSeconds);
+  if (!currentTurn || duration === 0 || !currentTurn.dueAt) {
+    return {
+      duration,
+      remaining: duration,
+      isRunning: false,
+      startedAt: currentTurn?.startedAt,
+      dueAt: currentTurn?.dueAt,
+    };
+  }
+
+  const remaining = Math.max(
+    0,
+    Math.round((new Date(currentTurn.dueAt).getTime() - Date.now()) / 1000),
+  );
+
+  return {
+    duration,
+    remaining,
+    isRunning: remaining > 0,
+    startedAt: currentTurn.startedAt,
+    dueAt: currentTurn.dueAt,
+  };
+}
+
+function mergeMembershipUpdates(
+  participants: RoomParticipant[],
+  updates: MembershipStatusUpdate[],
+): RoomParticipant[] {
+  if (updates.length === 0) {
+    return participants;
+  }
+
+  const updateMap = new Map(updates.map((update) => [update.userId, update]));
+
+  const merged = participants.map((participant) => {
+    const update = updateMap.get(participant.id);
+    if (!update) {
+      return participant;
+    }
+    return {
+      ...participant,
+      warnings: update.warnings,
+      isActive: update.isActive,
+    };
+  });
+
+  updateMap.forEach((update, userId) => {
+    const exists = merged.some((participant) => participant.id === userId);
+    if (!exists) {
+      merged.push({
+        id: userId,
+        name: "Player",
+        score: 0,
+        warnings: update.warnings,
+        isActive: update.isActive,
+      });
+    }
+  });
+
+  return merged;
 }

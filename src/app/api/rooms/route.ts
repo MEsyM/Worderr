@@ -3,6 +3,8 @@ import { RoomRole } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_MAX_WARNINGS } from "@/lib/constants";
+import { clampTurnSeconds } from "@/lib/server/turn-cycle";
 
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -48,6 +50,8 @@ export async function POST(request: Request) {
       maxSentences,
       forbiddenWords: rawForbiddenWords,
       rhymeTarget,
+      turnDurationSeconds,
+      maxWarnings,
     } = body ?? {};
 
     if (!title || typeof title !== "string") {
@@ -70,6 +74,12 @@ export async function POST(request: Request) {
     const parsedMaxSentences = Number.isInteger(maxSentences) ? Number(maxSentences) : 2;
     const normalizedRhymeTarget =
       typeof rhymeTarget === "string" && rhymeTarget.trim().length > 0 ? rhymeTarget.trim() : null;
+    const parsedDuration = clampTurnSeconds(
+      typeof turnDurationSeconds === "number" ? turnDurationSeconds : 0,
+    );
+    const parsedWarnings = Number.isInteger(maxWarnings)
+      ? Math.max(1, Math.min(Number(maxWarnings), 10))
+      : DEFAULT_MAX_WARNINGS;
 
     const code = await createRoomCode();
 
@@ -84,6 +94,8 @@ export async function POST(request: Request) {
         maxSentences: Math.max(1, Math.min(parsedMaxSentences, 8)),
         forbiddenWords,
         rhymeTarget: normalizedRhymeTarget,
+        maxTurnSeconds: parsedDuration,
+        maxWarnings: parsedWarnings,
         memberships: {
           create: {
             userId: session.user.id,

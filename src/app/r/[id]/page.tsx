@@ -42,7 +42,7 @@ export default async function RoomPage({ params }: RoomPageProps) {
   const providerKey = `${snapshot.id}:${snapshot.participants.length}:${snapshot.turns.length}`;
 
   return (
-    <RoomProvider key={providerKey} room={snapshot}>
+    <RoomProvider key={providerKey} room={snapshot} viewerId={viewer?.id}>
       <RoomExperience viewer={viewer ?? undefined} />
     </RoomProvider>
   );

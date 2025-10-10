@@ -48,8 +48,7 @@ function buildValidationOptions(rules: RoomRule[]): TurnValidationOptions {
 }
 
 export function TurnComposer() {
-  const { currentPlayer, currentPrompt, submitTurn, rules, suggestion, dismissSuggestion } =
-    useRoom();
+  const { currentPrompt, submitTurn, rules, suggestion, dismissSuggestion, canSubmit } = useRoom();
   const validationOptions = React.useMemo(() => buildValidationOptions(rules), [rules]);
   const [draft, setDraft] = React.useState("");
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -59,6 +58,14 @@ export function TurnComposer() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) {
+      return;
+    }
+
+    if (!canSubmit) {
+      toast({
+        title: "Please wait",
+        description: "It’s not your turn yet. Hang tight!",
+      });
       return;
     }
 
@@ -75,21 +82,20 @@ export function TurnComposer() {
 
     try {
       setIsSubmitting(true);
-      const turn = await submitTurn({ content: result.sanitized, authorId: currentPlayer.id });
-      if (turn) {
-        toast({
-          title: "Turn submitted",
-          description: "Your riff is live in the feed.",
-        });
-        setDraft("");
-        dismissSuggestion();
-      } else {
-        toast({
-          title: "Unable to submit turn",
-          description: "Please try again in a moment.",
-          variant: "destructive",
-        });
-      }
+      await submitTurn({ content: result.sanitized });
+      toast({
+        title: "Turn submitted",
+        description: "Your riff is live in the feed.",
+      });
+      setDraft("");
+      dismissSuggestion();
+    } catch (error) {
+      console.error("submitTurn failed", error);
+      toast({
+        title: "Unable to submit turn",
+        description: error instanceof Error ? error.message : "Please try again in a moment.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -128,6 +134,7 @@ export function TurnComposer() {
             onChange={(event) => setDraft(event.target.value)}
             className="min-h-[160px] w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             placeholder="Spin a line, keep it punchy, honor the rules."
+            disabled={!canSubmit}
           />
           <div className="flex flex-wrap justify-between gap-3 text-xs text-muted-foreground">
             <span>
@@ -140,9 +147,15 @@ export function TurnComposer() {
               <span>Forbidden: {validationOptions.forbiddenWords.join(", ")}</span>
             )}
           </div>
+          {!canSubmit && (
+            <p className="text-xs text-muted-foreground">
+              You&rsquo;re waiting for your turn. The composer will unlock when it&rsquo;s your
+              move.
+            </p>
+          )}
         </CardContent>
         <CardFooter className="justify-end">
-          <Button type="submit" disabled={isSubmitting || draft.trim().length === 0}>
+          <Button type="submit" disabled={isSubmitting || draft.trim().length === 0 || !canSubmit}>
             <Send className="mr-2 h-4 w-4" /> Publish turn
           </Button>
         </CardFooter>

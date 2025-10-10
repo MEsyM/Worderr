@@ -6,6 +6,7 @@ import { RoomRole } from "@prisma/client";
 import {
   buildRecapFromSnapshot,
   calculateParticipantScores,
+  type RoomCurrentTurn,
   type RoomHighlight,
   type RoomParticipant,
   type RoomRecap,
@@ -15,6 +16,7 @@ import {
   type TurnStatus,
 } from "@/lib/rooms";
 import { prisma } from "@/lib/prisma";
+import { MAX_TURN_SECONDS_CAP } from "@/lib/constants";
 
 type RoomWithRelations = Prisma.RoomGetPayload<{
   include: {
@@ -28,6 +30,7 @@ type RoomWithRelations = Prisma.RoomGetPayload<{
           };
         };
       };
+      orderBy: { joinedAt: "asc" };
     };
     turns: {
       orderBy: { createdAt: "asc" };
@@ -47,6 +50,7 @@ type RoomWithRelations = Prisma.RoomGetPayload<{
         };
       };
     };
+    currentTurnMembership: true;
   };
 }>;
 
@@ -109,6 +113,13 @@ function deriveRules(room: RoomWithRelations): RoomRule[] {
     rules.push({ type: "rhyme", value: room.rhymeTarget });
   }
 
+  const cappedTimer = Math.max(0, Math.min(room.maxTurnSeconds ?? 0, MAX_TURN_SECONDS_CAP));
+  if (cappedTimer > 0) {
+    rules.push({ type: "turnTimer", value: cappedTimer });
+  }
+
+  rules.push({ type: "maxWarnings", value: Math.max(1, room.maxWarnings ?? 1) });
+
   return rules;
 }
 
@@ -122,6 +133,8 @@ function mapParticipants(room: RoomWithRelations): RoomParticipant[] {
       avatar,
       score: 0,
       isHost: membership.role === RoomRole.HOST,
+      warnings: membership.warnings,
+      isActive: membership.isActive,
     } satisfies RoomParticipant;
   });
 }
@@ -165,6 +178,9 @@ function mapRoom(room: RoomWithRelations): RoomSnapshot {
       room: { id: room.id, title: room.title, code: room.code },
     } as SummaryWithTurn),
   );
+  const currentTurn = mapCurrentTurn(room);
+  const cappedTimer = Math.max(0, Math.min(room.maxTurnSeconds ?? 0, MAX_TURN_SECONDS_CAP));
+  const maxWarnings = Math.max(1, room.maxWarnings ?? 1);
 
   return {
     id: room.id,
@@ -178,7 +194,32 @@ function mapRoom(room: RoomWithRelations): RoomSnapshot {
     rules: deriveRules(room),
     prompts: derivePrompts(room, turns),
     highlights,
+    maxTurnSeconds: cappedTimer,
+    maxWarnings,
+    currentTurn,
   };
+}
+
+function mapCurrentTurn(room: RoomWithRelations): RoomCurrentTurn | undefined {
+  const membership = room.currentTurnMembership;
+  if (!membership) {
+    return undefined;
+  }
+
+  const startedAt = room.currentTurnStartedAt?.toISOString();
+  const cappedTimer = Math.max(0, Math.min(room.maxTurnSeconds ?? 0, MAX_TURN_SECONDS_CAP));
+  const dueAt =
+    cappedTimer > 0 && room.currentTurnStartedAt
+      ? new Date(room.currentTurnStartedAt.getTime() + cappedTimer * 1000).toISOString()
+      : undefined;
+
+  return {
+    membershipId: membership.id,
+    userId: membership.userId,
+    startedAt: startedAt ?? new Date().toISOString(),
+    dueAt,
+    warnings: membership.warnings,
+  } satisfies RoomCurrentTurn;
 }
 
 export async function getRoomSnapshot(roomId: string): Promise<RoomSnapshot | null> {
@@ -191,6 +232,7 @@ export async function getRoomSnapshot(roomId: string): Promise<RoomSnapshot | nu
             select: { id: true, name: true, image: true },
           },
         },
+        orderBy: { joinedAt: "asc" },
       },
       turns: {
         orderBy: { startedAt: "asc" },
@@ -202,6 +244,7 @@ export async function getRoomSnapshot(roomId: string): Promise<RoomSnapshot | nu
           turn: { select: { id: true, prompt: true, content: true } },
         },
       },
+      currentTurnMembership: true,
     },
   });
 
@@ -222,6 +265,7 @@ export async function listRoomSnapshots(): Promise<RoomSnapshot[]> {
             select: { id: true, name: true, image: true },
           },
         },
+        orderBy: { joinedAt: "asc" },
       },
       turns: {
         orderBy: { startedAt: "asc" },
@@ -233,6 +277,7 @@ export async function listRoomSnapshots(): Promise<RoomSnapshot[]> {
           turn: { select: { id: true, prompt: true, content: true } },
         },
       },
+      currentTurnMembership: true,
     },
   });
 
@@ -267,6 +312,7 @@ export async function listRoomsForUser(userId: string): Promise<RoomSnapshot[]> 
             select: { id: true, name: true, image: true },
           },
         },
+        orderBy: { joinedAt: "asc" },
       },
       turns: {
         orderBy: { startedAt: "asc" },
@@ -278,6 +324,7 @@ export async function listRoomsForUser(userId: string): Promise<RoomSnapshot[]> 
           turn: { select: { id: true, prompt: true, content: true } },
         },
       },
+      currentTurnMembership: true,
     },
   });
 

@@ -28,6 +28,8 @@ interface FormState {
   forbiddenWords: string;
   rhymeTarget: string;
   prompts: string;
+  turnDurationMinutes: number;
+  maxWarnings: number;
 }
 
 const DEFAULT_STATE: FormState = {
@@ -43,6 +45,8 @@ const DEFAULT_STATE: FormState = {
     'Respond with a line that rhymes with "velvet"',
     "Invent a rule for round three",
   ].join("\n"),
+  turnDurationMinutes: 2,
+  maxWarnings: 3,
 };
 
 export function RoomForm() {
@@ -55,6 +59,11 @@ export function RoomForm() {
     const list: RoomRule[] = [
       { type: "maxWords", value: state.maxWords },
       { type: "maxSentences", value: state.maxSentences },
+      {
+        type: "turnTimer",
+        value: Math.max(0, Math.round(state.turnDurationMinutes * 60)),
+      },
+      { type: "maxWarnings", value: state.maxWarnings },
     ];
     const forbidden = state.forbiddenWords
       .split(",")
@@ -67,7 +76,15 @@ export function RoomForm() {
       list.push({ type: "rhyme", value: state.rhymeTarget.trim() });
     }
     return list;
-  }, [state.maxWords, state.maxSentences, state.forbiddenWords, state.mode, state.rhymeTarget]);
+  }, [
+    state.maxWords,
+    state.maxSentences,
+    state.forbiddenWords,
+    state.mode,
+    state.rhymeTarget,
+    state.turnDurationMinutes,
+    state.maxWarnings,
+  ]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -103,6 +120,8 @@ export function RoomForm() {
           maxSentences: state.maxSentences,
           forbiddenWords: forbidden,
           rhymeTarget: state.mode === "crew" ? state.rhymeTarget.trim() : "",
+          turnDurationSeconds: Math.max(0, Math.round(state.turnDurationMinutes * 60)),
+          maxWarnings: state.maxWarnings,
         }),
       });
 
@@ -234,6 +253,46 @@ export function RoomForm() {
                 value={state.maxSentences}
                 onChange={(event) =>
                   setState((prev) => ({ ...prev, maxSentences: Number(event.target.value) }))
+                }
+                className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                disabled={!session?.user?.id}
+              />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Max turn duration (minutes)</label>
+              <input
+                type="number"
+                min={0}
+                max={60 * 24 * 30}
+                value={state.turnDurationMinutes}
+                onChange={(event) =>
+                  setState((prev) => ({
+                    ...prev,
+                    turnDurationMinutes: Number(event.target.value),
+                  }))
+                }
+                className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                placeholder="0 for unlimited"
+                disabled={!session?.user?.id}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter 0 for no limit. Maximum allowed is 30 days (43,200 minutes).
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Warning limit per player</label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={state.maxWarnings}
+                onChange={(event) =>
+                  setState((prev) => ({
+                    ...prev,
+                    maxWarnings: Number(event.target.value),
+                  }))
                 }
                 className="w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={!session?.user?.id}
