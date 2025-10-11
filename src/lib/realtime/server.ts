@@ -105,6 +105,17 @@ function onConnection(
     InterServerEvents,
     SocketData
   >;
+  const auth = socket.handshake.auth ?? {};
+  const userId = typeof auth.userId === "string" ? auth.userId : undefined;
+  const displayName = typeof auth.displayName === "string" ? auth.displayName : undefined;
+
+  if (userId) {
+    socket.data.userId = userId;
+  }
+
+  if (displayName) {
+    socket.data.displayName = displayName;
+  }
   const roomId = namespace.name.split("/").pop() ?? "";
 
   const participantPayload: RoomParticipantPayload = {
