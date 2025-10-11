@@ -7,11 +7,12 @@ import { auth } from "@/lib/auth";
 import { getRoomSnapshot } from "@/lib/server/rooms";
 
 interface RoomPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function generateMetadata({ params }: RoomPageProps): Promise<Metadata> {
-  const snapshot = await getRoomSnapshot(params.id);
+  const { id } = await params;
+  const snapshot = await getRoomSnapshot(id);
   if (!snapshot) {
     return {
       title: "Room not found",
@@ -25,7 +26,8 @@ export async function generateMetadata({ params }: RoomPageProps): Promise<Metad
 }
 
 export default async function RoomPage({ params }: RoomPageProps) {
-  const snapshot = await getRoomSnapshot(params.id);
+  const { id } = await params;
+  const snapshot = await getRoomSnapshot(id);
 
   if (!snapshot) {
     notFound();
