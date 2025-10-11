@@ -33,7 +33,7 @@ const ROOM_WITH_RELATIONS_INCLUDE = {
     orderBy: { joinedAt: "asc" },
   },
   turns: {
-    orderBy: { createdAt: "asc" },
+    orderBy: { startedAt: "asc" },
     include: {
       votes: true,
     },
