@@ -15,9 +15,20 @@ type RoomTimerState = {
   duration: number;
 };
 
+type PendingRealtimeAction =
+  | {
+      type: "emit";
+      roomId: string;
+      event: keyof ServerToClientEvents;
+      payload: Parameters<ServerToClientEvents[keyof ServerToClientEvents]>[0];
+    }
+  | { type: "timer:start"; roomId: string; duration: number }
+  | { type: "timer:stop"; roomId: string };
+
 let io: Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData> | null =
   null;
 const timers = new Map<string, RoomTimerState>();
+const pendingActions: PendingRealtimeAction[] = [];
 
 function buildNamespaceName(roomId: string): string {
   return `/rooms/${roomId}`;
@@ -94,6 +105,37 @@ function startTimer(
       isComplete: false,
     });
   }, 1000);
+}
+
+function flushPendingActions(): void {
+  if (!io || pendingActions.length === 0) {
+    return;
+  }
+
+  while (pendingActions.length > 0) {
+    const action = pendingActions.shift();
+    if (!action) {
+      continue;
+    }
+
+    switch (action.type) {
+      case "emit":
+        io.of(buildNamespaceName(action.roomId)).emit(action.event, action.payload);
+        break;
+      case "timer:start": {
+        const namespace = io.of(buildNamespaceName(action.roomId));
+        startTimer(namespace, action.roomId, action.duration);
+        break;
+      }
+      case "timer:stop": {
+        const namespace = io.of(buildNamespaceName(action.roomId));
+        clearRoomTimer(namespace, action.roomId);
+        break;
+      }
+      default:
+        break;
+    }
+  }
 }
 
 function onConnection(
@@ -192,6 +234,8 @@ export function initializeRealtimeServer(
     );
   });
 
+  flushPendingActions();
+
   return io;
 }
 
@@ -210,6 +254,7 @@ export function emitToRoom<T extends keyof ServerToClientEvents>(
   payload: Parameters<ServerToClientEvents[T]>[0],
 ): boolean {
   if (!io) {
+    pendingActions.push({ type: "emit", roomId, event, payload });
     return false;
   }
 
@@ -219,6 +264,7 @@ export function emitToRoom<T extends keyof ServerToClientEvents>(
 
 export function startRoomTimer(roomId: string, duration: number): boolean {
   if (!io) {
+    pendingActions.push({ type: "timer:start", roomId, duration });
     return false;
   }
 
@@ -229,6 +275,7 @@ export function startRoomTimer(roomId: string, duration: number): boolean {
 
 export function stopRoomTimer(roomId: string): boolean {
   if (!io) {
+    pendingActions.push({ type: "timer:stop", roomId });
     return false;
   }
 
