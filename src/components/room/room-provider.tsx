@@ -102,8 +102,23 @@ export function RoomProvider({ room, viewerId, children }: RoomProviderProps) {
     setTimer(timerSnapshot);
   }, [timerSnapshot]);
 
+  const viewerDetails = React.useMemo(() => {
+    if (!viewerId) {
+      return undefined;
+    }
+
+    const match = room.participants.find((participant) => participant.id === viewerId);
+    return {
+      userId: viewerId,
+      displayName: match?.name,
+    };
+  }, [room.participants, viewerId]);
+
   React.useEffect(() => {
-    const socket = io(`/rooms/${room.id}`, { path: "/api/socket.io" });
+    const socket = io(`/rooms/${room.id}`, {
+      path: "/api/socket.io",
+      auth: viewerDetails,
+    });
 
     const handleTurnAdvanced = (payload: TurnAdvancedPayload) => {
       const { turn, memberships, currentTurn: nextTurn } = payload;
@@ -129,7 +144,7 @@ export function RoomProvider({ room, viewerId, children }: RoomProviderProps) {
       socket.off("turn:advanced", handleTurnAdvanced);
       socket.disconnect();
     };
-  }, [room.id]);
+  }, [room.id, viewerDetails]);
 
   React.useEffect(() => {
     if (!timer.dueAt || !timer.isRunning) {
