@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { emitToRoom } from "@/lib/realtime/server";
 import {
   advanceTurn,
   ensureTurnState,
@@ -69,6 +70,12 @@ export async function POST(_request: Request, context: RouteParams) {
       warnings: membership.warnings,
       isActive: membership.isActive,
     }));
+
+    emitToRoom(params.id, "turn:advanced", {
+      roomId: params.id,
+      currentTurn,
+      memberships,
+    });
 
     return NextResponse.json(
       { currentTurn, memberships, timeoutEvents: result.timeoutEvents },

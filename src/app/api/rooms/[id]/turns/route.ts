@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { emitToRoom } from "@/lib/realtime/server";
 import { toRoomTurn } from "@/lib/server/rooms";
 import {
   advanceTurn,
@@ -100,9 +101,18 @@ export async function POST(request: Request, context: RouteParams) {
       isActive: membership.isActive,
     }));
 
+    const turn = toRoomTurn(result.created);
+
+    emitToRoom(params.id, "turn:advanced", {
+      roomId: params.id,
+      turn,
+      currentTurn,
+      memberships,
+    });
+
     return NextResponse.json(
       {
-        turn: toRoomTurn(result.created),
+        turn,
         currentTurn,
         memberships,
         timeoutEvents: result.timeoutEvents,
