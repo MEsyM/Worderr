@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { io } from "socket.io-client";
 
 import {
   buildRecapFromSnapshot,
@@ -14,6 +15,7 @@ import {
   type RoomSnapshot,
   type RoomTurn,
 } from "@/lib/rooms";
+import type { TurnAdvancedPayload } from "@/lib/realtime/events";
 
 interface TimerState {
   duration: number;
@@ -99,6 +101,35 @@ export function RoomProvider({ room, viewerId, children }: RoomProviderProps) {
   React.useEffect(() => {
     setTimer(timerSnapshot);
   }, [timerSnapshot]);
+
+  React.useEffect(() => {
+    const socket = io(`/rooms/${room.id}`, { path: "/api/socket.io" });
+
+    const handleTurnAdvanced = (payload: TurnAdvancedPayload) => {
+      const { turn, memberships, currentTurn: nextTurn } = payload;
+
+      if (turn) {
+        setTurns((existing) =>
+          [...existing.filter((entry) => entry.id !== turn.id), turn].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          ),
+        );
+      }
+
+      if (memberships.length > 0) {
+        setParticipantMeta((existing) => mergeMembershipUpdates(existing, memberships));
+      }
+
+      setCurrentTurn(nextTurn);
+    };
+
+    socket.on("turn:advanced", handleTurnAdvanced);
+
+    return () => {
+      socket.off("turn:advanced", handleTurnAdvanced);
+      socket.disconnect();
+    };
+  }, [room.id]);
 
   React.useEffect(() => {
     if (!timer.dueAt || !timer.isRunning) {
