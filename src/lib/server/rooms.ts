@@ -17,42 +17,43 @@ import {
 } from "@/lib/rooms";
 import { prisma } from "@/lib/prisma";
 import { MAX_TURN_SECONDS_CAP } from "@/lib/constants";
+import { ensureTurnState, loadTurnState } from "@/lib/server/turn-cycle";
 
-type RoomWithRelations = Prisma.RoomGetPayload<{
-  include: {
-    memberships: {
-      include: {
-        user: {
-          select: {
-            id: true;
-            name: true;
-            image: true;
-          };
-        };
-      };
-      orderBy: { joinedAt: "asc" };
-    };
-    turns: {
-      orderBy: { createdAt: "asc" };
-      include: {
-        votes: true;
-      };
-    };
-    summaries: {
-      orderBy: { createdAt: "desc" };
-      include: {
-        turn: {
-          select: {
-            id: true;
-            prompt: true;
-            content: true;
-          };
-        };
-      };
-    };
-    currentTurnMembership: true;
-  };
-}>;
+const ROOM_WITH_RELATIONS_INCLUDE = {
+  memberships: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+        },
+      },
+    },
+    orderBy: { joinedAt: "asc" },
+  },
+  turns: {
+    orderBy: { createdAt: "asc" },
+    include: {
+      votes: true,
+    },
+  },
+  summaries: {
+    orderBy: { createdAt: "desc" },
+    include: {
+      turn: {
+        select: {
+          id: true,
+          prompt: true,
+          content: true,
+        },
+      },
+    },
+  },
+  currentTurnMembership: true,
+} satisfies Prisma.RoomInclude;
+
+type RoomWithRelations = Prisma.RoomGetPayload<{ include: typeof ROOM_WITH_RELATIONS_INCLUDE }>;
 
 export type TurnWithVotes = Prisma.TurnGetPayload<{
   include: {
@@ -223,29 +224,18 @@ function mapCurrentTurn(room: RoomWithRelations): RoomCurrentTurn | undefined {
 }
 
 export async function getRoomSnapshot(roomId: string): Promise<RoomSnapshot | null> {
-  const room = await prisma.room.findUnique({
-    where: { id: roomId },
-    include: {
-      memberships: {
-        include: {
-          user: {
-            select: { id: true, name: true, image: true },
-          },
-        },
-        orderBy: { joinedAt: "asc" },
-      },
-      turns: {
-        orderBy: { startedAt: "asc" },
-        include: { votes: true },
-      },
-      summaries: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          turn: { select: { id: true, prompt: true, content: true } },
-        },
-      },
-      currentTurnMembership: true,
-    },
+  const room = await prisma.$transaction(async (tx) => {
+    const turnState = await loadTurnState(tx, roomId);
+    if (!turnState) {
+      return null;
+    }
+
+    await ensureTurnState(tx, turnState);
+
+    return tx.room.findUnique({
+      where: { id: roomId },
+      include: ROOM_WITH_RELATIONS_INCLUDE,
+    });
   });
 
   if (!room) {
@@ -258,27 +248,7 @@ export async function getRoomSnapshot(roomId: string): Promise<RoomSnapshot | nu
 export async function listRoomSnapshots(): Promise<RoomSnapshot[]> {
   const rooms = await prisma.room.findMany({
     orderBy: { createdAt: "desc" },
-    include: {
-      memberships: {
-        include: {
-          user: {
-            select: { id: true, name: true, image: true },
-          },
-        },
-        orderBy: { joinedAt: "asc" },
-      },
-      turns: {
-        orderBy: { startedAt: "asc" },
-        include: { votes: true },
-      },
-      summaries: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          turn: { select: { id: true, prompt: true, content: true } },
-        },
-      },
-      currentTurnMembership: true,
-    },
+    include: ROOM_WITH_RELATIONS_INCLUDE,
   });
 
   return rooms.map(mapRoom);
@@ -305,27 +275,7 @@ export async function listRoomsForUser(userId: string): Promise<RoomSnapshot[]> 
       },
     },
     orderBy: { createdAt: "desc" },
-    include: {
-      memberships: {
-        include: {
-          user: {
-            select: { id: true, name: true, image: true },
-          },
-        },
-        orderBy: { joinedAt: "asc" },
-      },
-      turns: {
-        orderBy: { startedAt: "asc" },
-        include: { votes: true },
-      },
-      summaries: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          turn: { select: { id: true, prompt: true, content: true } },
-        },
-      },
-      currentTurnMembership: true,
-    },
+    include: ROOM_WITH_RELATIONS_INCLUDE,
   });
 
   return rooms.map(mapRoom);

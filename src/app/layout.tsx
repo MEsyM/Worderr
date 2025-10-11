@@ -89,6 +89,9 @@ export default async function RootLayout({
                       <Button asChild size="sm" className="hidden sm:inline-flex">
                         <Link href="/new">Launch room</Link>
                       </Button>
+                      <span className="text-sm text-muted-foreground">
+                        {session.user.name ?? session.user.email ?? "Signed in"}
+                      </span>
                       <SignOutButton />
                     </>
                   ) : (
