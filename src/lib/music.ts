@@ -256,7 +256,7 @@ export function buildMusicPrompt({ roomTitle, storyText, analysis }: BuildPrompt
   const keywordLine =
     analysis.keywords.length > 0 ? ` Key images: ${analysis.keywords.join(", ")}.` : "";
 
-  const prompt = `Compose a ${analysis.profile.tempo} ${analysis.profile.label.toLowerCase()} instrumental score for the collaborative story "${roomTitle}". Focus on ${analysis.profile.instrumentation} and keep the vibe ${analysis.profile.vibe}. Draw inspiration from this excerpt: ${excerpt}.${keywordLine} Avoid explicit vocals; lean on humming or instrumental hooks.`;
+  const prompt = `Compose a ${analysis.profile.tempo} ${analysis.profile.label.toLowerCase()} score with expressive vocals for the collaborative story "${roomTitle}". Blend ${analysis.profile.instrumentation} with lead lines that can be sung, rapped, or spoken to mirror the story's emotions. Keep the vibe ${analysis.profile.vibe} and draw inspiration from this excerpt: ${excerpt}.${keywordLine} Prioritize a clear lyrical presence throughout.`;
 
   return { prompt, excerpt };
 }
