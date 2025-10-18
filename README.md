@@ -75,6 +75,8 @@ The `.env.example` file documents every required variable. Update the placeholde
 | `EMAIL_FROM`                                  | Email address (optionally with a display name) that issues authentication emails.      |
 | `SOCKET_IO_SERVER_URL`                        | Base URL for the Socket.IO server used for collaborative updates.                      |
 | `SOCKET_IO_CLIENT_PATH`                       | Socket.IO path shared by the server and client.                                        |
+| `MUSICGEN_API_URL`                            | (Optional) MusicGen inference endpoint for the collaborative soundtrack feature.       |
+| `MUSICGEN_API_TOKEN`                          | Hugging Face token authorised to call the configured MusicGen model.                   |
 
 > **Tip:** commit the `.env.example` file but never commit the populated `.env` file.
 
